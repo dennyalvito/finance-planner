@@ -15,10 +15,89 @@ test("keeps chart tooltips stable for display labels outside the chart config", 
   await cashFlowChart.hover({ position: { x: 240, y: 130 } })
   await spendingChart.hover({ position: { x: 88, y: 30 } })
 
-  await expect(
-    page.getByRole("heading", { name: "Your money, in one place." })
-  ).toBeVisible()
+  await expect(cashFlowChart).toBeVisible()
   expect(pageErrors).toEqual([])
+})
+
+test("shows selective chart skeletons before mounting overview charts", async ({
+  page,
+}) => {
+  await page.goto("/budgets")
+  await page.locator('[data-app-ready="true"]').waitFor()
+
+  const cashFlowSkeleton = page.getByTestId("cash-flow-skeleton")
+  const spendingSkeleton = page.getByTestId("spending-skeleton")
+  const skeletonsAppeared = Promise.all([
+    cashFlowSkeleton.waitFor({ state: "visible" }),
+    spendingSkeleton.waitFor({ state: "visible" }),
+  ])
+
+  await page
+    .getByRole("link", { name: "Overview", exact: true })
+    .evaluate((link: HTMLAnchorElement) => link.click())
+  await skeletonsAppeared
+
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByTestId("cash-flow-chart")).toBeVisible()
+  await expect(page.getByTestId("spending-chart")).toBeVisible()
+  await expect(cashFlowSkeleton).toHaveCount(0)
+  await expect(spendingSkeleton).toHaveCount(0)
+})
+
+test("collapses the desktop sidebar to icons and keeps the chart card content-sized", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto("/")
+  await page.locator('[data-app-ready="true"]').waitFor()
+
+  const chartCard = page.getByTestId("cash-flow-card")
+  const chart = page.getByTestId("cash-flow-chart")
+  const cardBox = await chartCard.boundingBox()
+  const chartBox = await chart.boundingBox()
+
+  expect(cardBox).not.toBeNull()
+  expect(chartBox).not.toBeNull()
+  expect(
+    cardBox!.y + cardBox!.height - (chartBox!.y + chartBox!.height)
+  ).toBeLessThan(40)
+
+  const overviewItem = await page
+    .getByRole("link", { name: "Overview" })
+    .boundingBox()
+  const transactionsItem = await page
+    .getByRole("link", { name: "Transactions" })
+    .boundingBox()
+
+  expect(overviewItem).not.toBeNull()
+  expect(transactionsItem).not.toBeNull()
+  expect(
+    transactionsItem!.y - (overviewItem!.y + overviewItem!.height)
+  ).toBeGreaterThanOrEqual(4)
+
+  await page.locator('[data-sidebar="trigger"]').click()
+
+  const sidebar = page.locator('[data-slot="sidebar"][data-state="collapsed"]')
+  await expect(sidebar).toBeVisible()
+
+  const sidebarContainer = page.locator('[data-slot="sidebar-container"]')
+  await expect(sidebarContainer).toHaveCSS("width", "48px")
+
+  const overviewLabel = page
+    .locator('[data-sidebar="menu-button"]')
+    .filter({ hasText: "Overview" })
+    .locator("span")
+  const labelBox = await overviewLabel.boundingBox()
+
+  expect(labelBox).not.toBeNull()
+  expect(labelBox!.width).toBeLessThanOrEqual(1)
+  expect(labelBox!.height).toBeLessThanOrEqual(1)
+
+  await page.getByRole("link", { name: "Budgets" }).click()
+  await expect(page).toHaveURL(/\/budgets$/)
+  await expect(
+    page.locator('[data-slot="sidebar"][data-state="collapsed"]')
+  ).toBeVisible()
 })
 
 test("records and persists a transaction from the desktop dashboard", async ({
@@ -27,9 +106,7 @@ test("records and persists a transaction from the desktop dashboard", async ({
   await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()
 
-  await expect(
-    page.getByRole("heading", { name: "Your money, in one place." })
-  ).toBeVisible()
+  await expect(page.getByText("Recorded net", { exact: true })).toBeVisible()
   await expect(page.getByRole("link", { name: "Transactions" })).toBeVisible()
 
   await page.getByTestId("add-transaction-desktop").click()
@@ -72,6 +149,24 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await page.getByRole("link", { name: "Budgets" }).click()
   await expect(page).toHaveURL(/\/budgets$/)
   await expect(page.getByRole("heading", { name: "Budgets" })).toBeVisible()
+  await expect(page.getByTestId("route-stage")).toHaveAttribute(
+    "data-view",
+    "budgets"
+  )
+  const animation = await page
+    .getByTestId("route-stage")
+    .evaluate((element) => {
+      const styles = window.getComputedStyle(element)
+
+      return {
+        duration: styles.animationDuration,
+        name: styles.animationName,
+      }
+    })
+  expect(animation).toEqual({
+    duration: "0.14s",
+    name: "coin-route-enter",
+  })
 
   const hasOverflow = await page.evaluate(
     () =>

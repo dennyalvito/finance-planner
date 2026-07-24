@@ -1,5 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react"
-import { Link } from "@tanstack/react-router"
+import {
+  lazy,
+  startTransition,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
+import { Link, Outlet, useLocation } from "@tanstack/react-router"
 import {
   ArrowDownLeftIcon,
   ArrowUpRightIcon,
@@ -138,7 +145,27 @@ const navigation: Array<{
   },
 ]
 
-export function CoinApp({ view = "overview" }: { view?: CoinView }) {
+function getView(pathname: string): CoinView {
+  if (pathname.startsWith("/transactions")) {
+    return "transactions"
+  }
+
+  if (pathname.startsWith("/budgets")) {
+    return "budgets"
+  }
+
+  if (pathname.startsWith("/settings")) {
+    return "settings"
+  }
+
+  return "overview"
+}
+
+export function CoinApp() {
+  const pathname = useLocation({
+    select: (location) => location.pathname,
+  })
+  const view = getView(pathname)
   const [isInteractive, setIsInteractive] = useState(false)
   const [transactionOpen, setTransactionOpen] = useState(false)
   const [budgetOpen, setBudgetOpen] = useState(false)
@@ -164,7 +191,12 @@ export function CoinApp({ view = "overview" }: { view?: CoinView }) {
         className="min-w-0 pb-24 md:pb-0"
       >
         <AppHeader view={view} onAdd={() => setTransactionOpen(true)} />
-        <div className="mx-auto flex w-full max-w-[96rem] flex-1 flex-col px-4 py-5 sm:px-6 md:py-7 xl:px-8">
+        <div
+          key={view}
+          data-testid="route-stage"
+          data-view={view}
+          className="coin-route-enter mx-auto flex w-full max-w-384 flex-1 flex-col px-4 py-5 sm:px-6 md:py-7 xl:px-8"
+        >
           {view === "overview" && (
             <OverviewView
               {...shared}
@@ -206,6 +238,7 @@ export function CoinApp({ view = "overview" }: { view?: CoinView }) {
         categories={finance.categories}
         onSubmit={finance.saveBudget}
       />
+      <Outlet />
     </SidebarProvider>
   )
 }
@@ -213,7 +246,7 @@ export function CoinApp({ view = "overview" }: { view?: CoinView }) {
 function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
   return (
     <Sidebar collapsible="icon" className="hidden md:flex">
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
         <div className="flex items-center gap-3 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <CircleDollarSignIcon aria-hidden="true" className="size-5" />
@@ -228,7 +261,7 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1">
               {navigation.map((item) => {
                 const Icon = item.icon
                 return (
@@ -238,10 +271,13 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
                       isActive={view === item.view}
                       tooltip={item.label}
                       size="lg"
+                      className="group-data-[collapsible=icon]:justify-center"
                     >
-                      <Link to={item.to}>
+                      <Link to={item.to} preload="render">
                         <Icon aria-hidden="true" />
-                        <span>{item.label}</span>
+                        <span className="group-data-[collapsible=icon]:sr-only">
+                          {item.label}
+                        </span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -253,35 +289,44 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
         <SidebarGroup>
           <SidebarGroupLabel>Quick action</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1">
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={onAdd}
                   tooltip="Add transaction"
                   size="lg"
+                  className="group-data-[collapsible=icon]:justify-center"
                 >
                   <PlusIcon aria-hidden="true" />
-                  <span>Add transaction</span>
+                  <span className="group-data-[collapsible=icon]:sr-only">
+                    Add transaction
+                  </span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
+      <SidebarFooter className="p-4 group-data-[collapsible=icon]:p-2">
         <div className="rounded-xl bg-sidebar-accent p-3 group-data-[collapsible=icon]:hidden">
           <p className="text-xs font-medium">Local-first</p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             Your ledger stays in this browser.
           </p>
         </div>
-        <SidebarMenu>
+        <SidebarMenu className="gap-1">
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" tooltip="Local profile">
+            <SidebarMenuButton
+              size="lg"
+              tooltip="Local profile"
+              className="group-data-[collapsible=icon]:justify-center"
+            >
               <Avatar size="sm">
                 <AvatarFallback>CO</AvatarFallback>
               </Avatar>
-              <span>Local profile</span>
+              <span className="group-data-[collapsible=icon]:sr-only">
+                Local profile
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -396,9 +441,10 @@ function DockLink({
   return (
     <Link
       to={item.to}
+      preload="render"
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[0.66rem] font-medium text-muted-foreground transition-colors",
+        "flex min-w-0 touch-manipulation flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[0.66rem] font-medium text-muted-foreground active:bg-secondary active:text-foreground",
         active && "bg-secondary text-foreground"
       )}
     >
@@ -428,20 +474,31 @@ function OverviewView({
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
 }) {
+  const [chartsReady, setChartsReady] = useState(false)
   const summary = useMemo(() => summarizeLedger(transactions), [transactions])
   const series = useMemo(
-    () => buildCashFlowSeries(transactions),
-    [transactions]
+    () => (chartsReady ? buildCashFlowSeries(transactions) : []),
+    [chartsReady, transactions]
   )
   const spending = useMemo(
-    () => buildCategorySpending(transactions, categories),
-    [transactions, categories]
+    () => (chartsReady ? buildCategorySpending(transactions, categories) : []),
+    [categories, chartsReady, transactions]
   )
   const budget = useMemo(
     () => calculateBudgetProgress(transactions, budgets),
     [transactions, budgets]
   )
   const topCategoryName = spending.length > 0 ? spending[0].name : "No expenses"
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      startTransition(() => {
+        setChartsReady(true)
+      })
+    }, 160)
+
+    return () => window.clearTimeout(timeout)
+  }, [])
 
   return (
     <div className="flex flex-col gap-6">
@@ -492,7 +549,11 @@ function OverviewView({
 
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,0.8fr)]">
         <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
-          <Card className="min-w-0 lg:row-span-2">
+          <Card
+            data-testid="cash-flow-card"
+            aria-busy={!chartsReady}
+            className="min-w-0 self-start lg:row-span-2"
+          >
             <CardHeader>
               <CardTitle>Cash-flow rhythm</CardTitle>
               <CardDescription>
@@ -503,13 +564,17 @@ function OverviewView({
               </CardAction>
             </CardHeader>
             <CardContent className="min-w-0">
-              <Suspense fallback={<Skeleton className="h-[260px] w-full" />}>
-                <CashFlowChart data={series} />
-              </Suspense>
+              {chartsReady ? (
+                <Suspense fallback={<CashFlowSkeleton />}>
+                  <CashFlowChart data={series} />
+                </Suspense>
+              ) : (
+                <CashFlowSkeleton />
+              )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card aria-busy={!chartsReady}>
             <CardHeader>
               <CardTitle>Spending overview</CardTitle>
               <CardDescription>
@@ -517,17 +582,23 @@ function OverviewView({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Suspense
-                fallback={<Skeleton className="mx-auto size-44 rounded-full" />}
-              >
-                <SpendingChart data={spending} />
-              </Suspense>
+              {chartsReady ? (
+                <Suspense fallback={<SpendingSkeleton />}>
+                  <SpendingChart data={spending} />
+                </Suspense>
+              ) : (
+                <SpendingSkeleton />
+              )}
             </CardContent>
             <CardFooter className="justify-between">
               <span className="text-sm text-muted-foreground">
                 Top category
               </span>
-              <span className="text-sm font-medium">{topCategoryName}</span>
+              {chartsReady ? (
+                <span className="text-sm font-medium">{topCategoryName}</span>
+              ) : (
+                <Skeleton aria-hidden="true" className="h-4 w-20" />
+              )}
             </CardFooter>
           </Card>
 
@@ -575,6 +646,28 @@ function OverviewView({
         </div>
       </div>
     </div>
+  )
+}
+
+function CashFlowSkeleton() {
+  return (
+    <Skeleton
+      data-testid="cash-flow-skeleton"
+      role="status"
+      aria-label="Loading cash-flow chart"
+      className="h-65 w-full"
+    />
+  )
+}
+
+function SpendingSkeleton() {
+  return (
+    <Skeleton
+      data-testid="spending-skeleton"
+      role="status"
+      aria-label="Loading spending chart"
+      className="mx-auto size-44 rounded-full"
+    />
   )
 }
 

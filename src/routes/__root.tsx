@@ -3,9 +3,11 @@ import { ThemeProvider } from "next-themes"
 
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { CoinApp } from "@/features/finance/coin-app"
 import appCss from "../styles.css?url"
 
 export const Route = createRootRoute({
+  component: CoinApp,
   head: () => ({
     meta: [
       {
