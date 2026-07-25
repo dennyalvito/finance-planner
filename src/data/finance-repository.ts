@@ -1,5 +1,7 @@
-import Dexie from "dexie"
+﻿import Dexie from "dexie"
 import type { EntityTable } from "dexie"
+
+import type { FinanceRepository } from "@/data/finance-repository.types"
 
 import type {
   Budget,
@@ -223,4 +225,18 @@ export async function clearDemoTransactions() {
   const db = getFinanceDatabase()
   if (!db) return
   await db.transactions.filter((item) => item.isDemo === true).delete()
+}
+
+export const localFinanceRepository: FinanceRepository = {
+  storage: "device",
+  load: async () => ({
+    transactions: await listTransactions(),
+    categories: await listCategories(),
+    budgets: await listBudgets(),
+  }),
+  addTransaction,
+  deleteTransaction,
+  createCategory,
+  saveBudget,
+  clearDemoTransactions,
 }

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+﻿import { expect, test } from "@playwright/test"
 
 test("keeps chart tooltips stable for display labels outside the chart config", async ({
   page,
@@ -178,4 +178,31 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
       document.documentElement.clientWidth
   )
   expect(hasOverflow).toBe(false)
+})
+
+test("labels the guest workspace and offers Google account mode", async ({
+  page,
+}) => {
+  await page.goto("/settings")
+  await page.locator('[data-app-ready="true"]').waitFor()
+
+  await expect(page.getByText("This browser", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("Guest data stays in IndexedDB", { exact: false })
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Continue with Google" })
+  ).toBeEnabled()
+
+  await page.getByRole("button", { name: "Open profile menu" }).click()
+  const profileMenu = page.getByRole("menu")
+  await expect(
+    profileMenu.getByText("Guest mode", { exact: true })
+  ).toBeVisible()
+  await expect(
+    profileMenu.getByText("On this device", { exact: true })
+  ).toBeVisible()
+  await expect(
+    page.getByRole("menuitem", { name: "Continue with Google" })
+  ).toBeVisible()
 })

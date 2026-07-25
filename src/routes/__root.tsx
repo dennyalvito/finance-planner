@@ -1,4 +1,4 @@
-import {
+﻿import {
   HeadContent,
   Outlet,
   Scripts,
@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes"
 
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { AuthProvider } from "@/features/auth/auth-provider"
 import appCss from "../styles.css?url"
 
 export const Route = createRootRoute({
@@ -62,10 +63,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="min-h-svh antialiased">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <TooltipProvider>
-            {children}
-            <Toaster position="bottom-right" richColors />
-          </TooltipProvider>
+          <AuthProvider>
+            <TooltipProvider>
+              {children}
+              <Toaster position="bottom-right" richColors />
+            </TooltipProvider>
+          </AuthProvider>
         </ThemeProvider>
         <Scripts />
       </body>

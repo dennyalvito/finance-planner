@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   lazy,
   startTransition,
@@ -15,8 +15,12 @@ import {
   ArrowUpRightIcon,
   ChartNoAxesCombinedIcon,
   CircleDollarSignIcon,
+  CloudIcon,
   GaugeIcon,
+  HardDriveIcon,
   LayoutDashboardIcon,
+  LogInIcon,
+  LogOutIcon,
   MoreHorizontalIcon,
   PlusIcon,
   ReceiptTextIcon,
@@ -91,6 +95,7 @@ import {
   summarizeLedger,
 } from "@/domain/finance"
 import type { Budget, Category, FinanceTransaction } from "@/domain/finance"
+import { useAuth } from "@/features/auth/auth-provider"
 import { BudgetDialog } from "@/features/finance/budget-dialog"
 import { getCategoryIcon } from "@/features/finance/category-icon"
 import { TransactionDialog } from "@/features/finance/transaction-dialog"
@@ -190,6 +195,7 @@ export function CoinApp() {
   const [transactionOpen, setTransactionOpen] = useState(false)
   const [budgetOpen, setBudgetOpen] = useState(false)
   const finance = useFinance()
+  const appReady = isInteractive && !finance.isLoading
   const openTransaction = useCallback(() => setTransactionOpen(true), [])
   const openBudget = useCallback(() => setBudgetOpen(true), [])
   const contextValue = useMemo(
@@ -210,9 +216,9 @@ export function CoinApp() {
       <SidebarProvider>
         <CoinSidebar view={view} onAdd={openTransaction} />
         <SidebarInset
-          data-app-ready={isInteractive ? "true" : "false"}
-          aria-busy={!isInteractive}
-          inert={!isInteractive}
+          data-app-ready={appReady ? "true" : "false"}
+          aria-busy={!appReady}
+          inert={!appReady}
           className="min-w-0 pb-24 md:pb-0"
         >
           <AppHeader view={view} onAdd={openTransaction} />
@@ -294,7 +300,20 @@ export function SettingsPage() {
   return <SettingsView categories={finance.categories} />
 }
 
+function accountLabel(email?: string) {
+  return email ?? "Cloud account"
+}
+
+function accountInitials(email?: string) {
+  if (!email) return "CO"
+  return email.slice(0, 2).toUpperCase()
+}
+
 function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
+  const auth = useAuth()
+  const cloudWorkspace = auth.status === "authenticated"
+  const profile = cloudWorkspace ? accountLabel(auth.user?.email) : "Guest mode"
+
   return (
     <Sidebar collapsible="icon" className="hidden md:flex">
       <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
@@ -360,23 +379,29 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
       </SidebarContent>
       <SidebarFooter className="p-4 group-data-[collapsible=icon]:p-2">
         <div className="rounded-xl bg-sidebar-accent p-3 group-data-[collapsible=icon]:hidden">
-          <p className="text-xs font-medium">Local-first</p>
+          <p className="text-xs font-medium">
+            {cloudWorkspace ? "Cloud workspace" : "On this device"}
+          </p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Your ledger stays in this browser.
+            {cloudWorkspace
+              ? "Your ledger is stored in your private account."
+              : "Your guest ledger stays in this browser."}
           </p>
         </div>
         <SidebarMenu className="gap-1">
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              tooltip="Local profile"
+              tooltip={profile}
               className="group-data-[collapsible=icon]:justify-center"
             >
               <Avatar size="sm">
-                <AvatarFallback>CO</AvatarFallback>
+                <AvatarFallback>
+                  {cloudWorkspace ? accountInitials(auth.user?.email) : "GU"}
+                </AvatarFallback>
               </Avatar>
-              <span className="group-data-[collapsible=icon]:sr-only">
-                Local profile
+              <span className="truncate group-data-[collapsible=icon]:sr-only">
+                {profile}
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -386,10 +411,31 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
     </Sidebar>
   )
 }
-
 function AppHeader({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
+  const auth = useAuth()
   const title =
     navigation.find((item) => item.view === view)?.label ?? "Overview"
+  const cloudWorkspace = auth.status === "authenticated"
+  const profile = cloudWorkspace ? accountLabel(auth.user?.email) : "Guest mode"
+
+  const signIn = async () => {
+    try {
+      await auth.signInWithGoogle()
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Google sign-in failed."
+      )
+    }
+  }
+
+  const signOut = async () => {
+    try {
+      await auth.signOut()
+      toast.success("Signed out. Your guest workspace is still on this device.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sign-out failed.")
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center border-b bg-background/90 px-4 backdrop-blur-xl sm:px-6 xl:px-8">
@@ -422,12 +468,19 @@ function AppHeader({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Open profile menu">
               <Avatar size="sm">
-                <AvatarFallback>CO</AvatarFallback>
+                <AvatarFallback>
+                  {cloudWorkspace ? accountInitials(auth.user?.email) : "GU"}
+                </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Local profile</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel className="flex flex-col gap-1">
+              <span>{profile}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {cloudWorkspace ? "Cloud workspace" : "On this device"}
+              </span>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
@@ -443,13 +496,29 @@ function AppHeader({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              {cloudWorkspace ? (
+                <DropdownMenuItem onSelect={() => void signOut()}>
+                  <LogOutIcon />
+                  Sign out
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  disabled={!auth.configured || auth.status === "loading"}
+                  onSelect={() => void signIn()}
+                >
+                  <LogInIcon />
+                  Continue with Google
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>
   )
 }
-
 function MobileDock({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
   const first = navigation.slice(0, 2)
   const last = navigation.slice(2)
@@ -657,7 +726,7 @@ function OverviewView({
               <CardTitle>Budget pulse</CardTitle>
               <CardDescription>
                 {budget.configured
-                  ? "This month’s selected limits."
+                  ? "This monthâ€™s selected limits."
                   : "No limits set this month."}
               </CardDescription>
             </CardHeader>
@@ -965,7 +1034,7 @@ function TransactionList({
                     : "text-foreground"
                 )}
               >
-                {transaction.type === "income" ? "+" : "−"}
+                {transaction.type === "income" ? "+" : "âˆ’"}
                 {formatCompactRupiah(transaction.amount)}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -1166,6 +1235,8 @@ function SummaryValue({ label, value }: { label: string; value: number }) {
 }
 
 function SettingsView({ categories }: { categories: Category[] }) {
+  const auth = useAuth()
+  const cloudWorkspace = auth.status === "authenticated"
   const expenseCategories = categories.filter(
     (category) => category.type === "expense"
   )
@@ -1173,12 +1244,31 @@ function SettingsView({ categories }: { categories: Category[] }) {
     (category) => category.type === "income"
   )
 
+  const signIn = async () => {
+    try {
+      await auth.signInWithGoogle()
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Google sign-in failed."
+      )
+    }
+  }
+
+  const signOut = async () => {
+    try {
+      await auth.signOut()
+      toast.success("Signed out. Your guest workspace is still on this device.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sign-out failed.")
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeading
         eyebrow="Preferences"
         title="Categories & settings"
-        description="Review the structure behind your local ledger."
+        description="Review the structure behind your active workspace."
       />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <Card>
@@ -1215,22 +1305,50 @@ function SettingsView({ categories }: { categories: Category[] }) {
           <Card>
             <CardHeader>
               <CardTitle>Storage</CardTitle>
-              <CardDescription>Private for this phase</CardDescription>
+              <CardDescription>
+                {cloudWorkspace ? "Private cloud workspace" : "Guest workspace"}
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <p className="text-sm font-medium">Local browser database</p>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {cloudWorkspace ? (
+                  <CloudIcon aria-hidden="true" className="size-4" />
+                ) : (
+                  <HardDriveIcon aria-hidden="true" className="size-4" />
+                )}
+                <span>
+                  {cloudWorkspace ? "Supabase account" : "This browser"}
+                </span>
+              </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Authentication and private synchronization can be connected
-                later without changing the finance rules.
+                {cloudWorkspace
+                  ? `Signed in as ${accountLabel(auth.user?.email)}. Account data is separate from guest data on this device.`
+                  : "Guest data stays in IndexedDB on this device. Sign in for a separate cloud-backed workspace."}
               </p>
             </CardContent>
+            <CardFooter>
+              {cloudWorkspace ? (
+                <Button variant="outline" onClick={() => void signOut()}>
+                  <LogOutIcon data-icon="inline-start" />
+                  Sign out
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  disabled={!auth.configured || auth.status === "loading"}
+                  onClick={() => void signIn()}
+                >
+                  <LogInIcon data-icon="inline-start" />
+                  Continue with Google
+                </Button>
+              )}
+            </CardFooter>
           </Card>
         </div>
       </div>
     </div>
   )
 }
-
 function CategoryGroup({
   title,
   categories,
