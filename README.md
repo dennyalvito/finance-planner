@@ -7,8 +7,8 @@ The responsive product shell uses a collapsible sidebar on desktop and a fixed n
 ## Local development
 
 ```bash
-npm install
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 Open `http://localhost:3000`.
@@ -16,11 +16,11 @@ Open `http://localhost:3000`.
 ## Verification
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run test:e2e
-npm run build
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:e2e
+pnpm build
 ```
 
 The app uses TanStack Start, React, TypeScript, Tailwind CSS v4, shadcn/ui, Dexie, and Recharts. Finance rules live in `src/domain`, local persistence in `src/data`, and the product UI in `src/features/finance`.

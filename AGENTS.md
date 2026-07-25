@@ -12,13 +12,13 @@ The MVP has one unified ledger starting at zero. Net recorded cash flow equals i
 
 Expected scripts:
 
-- `npm install` - install locked dependencies.
-- `npm run dev` - start the development server.
-- `npm run build` - create the production build.
-- `npm run typecheck` - check TypeScript without emitting files.
-- `npm run lint` - run ESLint and formatting checks.
-- `npm test` - run unit and component tests.
-- `npm run test:e2e` - run critical browser workflows.
+- `pnpm install --frozen-lockfile` - install locked dependencies.
+- `pnpm dev` - start the development server.
+- `pnpm build` - create the production build.
+- `pnpm typecheck` - check TypeScript without emitting files.
+- `pnpm lint` - run ESLint and formatting checks.
+- `pnpm test` - run unit and component tests.
+- `pnpm test:e2e` - run critical browser workflows.
 
 Before review, run all relevant checks.
 
@@ -28,7 +28,7 @@ Use two-space indentation, strict TypeScript, and Prettier. Use PascalCase for c
 
 ### shadcn/ui
 
-Use shadcn/ui as the component foundation. Before adding UI, run `npx shadcn@latest info --json`, check installed components, search the registry, and run `npx shadcn@latest docs <component>`. Prefer existing components, built-in variants, full composition, and semantic tokens. Forms use `FieldGroup` and `Field`; overlays require accessible titles. Use shadcn's Chart wrapper.
+Use shadcn/ui as the component foundation. Before adding UI, run `pnpm dlx shadcn@latest info --json`, check installed components, search the registry, and run `pnpm dlx shadcn@latest docs <component>`. Prefer existing components, built-in variants, full composition, and semantic tokens. Forms use `FieldGroup` and `Field`; overlays require accessible titles. Use shadcn's Chart wrapper.
 
 Use the project package runner for additions and updates. Preview updates with `--dry-run` and `--diff`; never overwrite without approval. Review generated files and honor configured aliases, base, and icons.
 
