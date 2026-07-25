@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 
 import {
@@ -22,14 +22,17 @@ export function useFinance() {
   const categories = useLiveQuery(listCategories, [], [])
   const budgets = useLiveQuery(listBudgets, [], [])
 
-  return {
-    transactions,
-    categories,
-    budgets,
-    addTransaction,
-    createCategory,
-    deleteTransaction,
-    saveBudget,
-    clearDemoTransactions,
-  }
+  return useMemo(
+    () => ({
+      transactions,
+      categories,
+      budgets,
+      addTransaction,
+      createCategory,
+      deleteTransaction,
+      saveBudget,
+      clearDemoTransactions,
+    }),
+    [budgets, categories, transactions]
+  )
 }

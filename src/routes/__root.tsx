@@ -1,13 +1,17 @@
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRoute,
+} from "@tanstack/react-router"
 import { ThemeProvider } from "next-themes"
 
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { CoinApp } from "@/features/finance/coin-app"
 import appCss from "../styles.css?url"
 
 export const Route = createRootRoute({
-  component: CoinApp,
+  component: RootLayout,
   head: () => ({
     meta: [
       {
@@ -45,6 +49,10 @@ export const Route = createRootRoute({
   ),
   shellComponent: RootDocument,
 })
+
+function RootLayout() {
+  return <Outlet />
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (

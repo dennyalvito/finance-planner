@@ -9,104 +9,133 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as BudgetsRouteImport } from './routes/budgets'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as TransactionsRouteImport } from './routes/transactions'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppBudgetsRouteImport } from './routes/_app/budgets'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppTransactionsRouteImport } from './routes/_app/transactions'
 
-const IndexRoute = IndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const BudgetsRoute = BudgetsRouteImport.update({
+const AppBudgetsRoute = AppBudgetsRouteImport.update({
   id: '/budgets',
   path: '/budgets',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const SettingsRoute = SettingsRouteImport.update({
+const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const TransactionsRoute = TransactionsRouteImport.update({
+const AppTransactionsRoute = AppTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/budgets': typeof BudgetsRoute
-  '/settings': typeof SettingsRoute
-  '/transactions': typeof TransactionsRoute
+  '/': typeof AppIndexRoute
+  '/budgets': typeof AppBudgetsRoute
+  '/settings': typeof AppSettingsRoute
+  '/transactions': typeof AppTransactionsRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/budgets': typeof BudgetsRoute
-  '/settings': typeof SettingsRoute
-  '/transactions': typeof TransactionsRoute
+  '/budgets': typeof AppBudgetsRoute
+  '/settings': typeof AppSettingsRoute
+  '/transactions': typeof AppTransactionsRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/budgets': typeof BudgetsRoute
-  '/settings': typeof SettingsRoute
-  '/transactions': typeof TransactionsRoute
+  '/_app': typeof AppRouteWithChildren
+  '/_app/budgets': typeof AppBudgetsRoute
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/transactions': typeof AppTransactionsRoute
+  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths: '/' | '/budgets' | '/settings' | '/transactions'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/budgets' | '/settings' | '/transactions'
-  id: '__root__' | '/' | '/budgets' | '/settings' | '/transactions'
+  to: '/budgets' | '/settings' | '/transactions' | '/'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/_app/budgets'
+    | '/_app/settings'
+    | '/_app/transactions'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  BudgetsRoute: typeof BudgetsRoute
-  SettingsRoute: typeof SettingsRoute
-  TransactionsRoute: typeof TransactionsRoute
+  AppRoute: typeof AppRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/budgets': {
-      id: '/budgets'
+    '/_app/budgets': {
+      id: '/_app/budgets'
       path: '/budgets'
       fullPath: '/budgets'
-      preLoaderRoute: typeof BudgetsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppBudgetsRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/settings': {
-      id: '/settings'
+    '/_app/settings': {
+      id: '/_app/settings'
       path: '/settings'
       fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/transactions': {
-      id: '/transactions'
+    '/_app/transactions': {
+      id: '/_app/transactions'
       path: '/transactions'
       fullPath: '/transactions'
-      preLoaderRoute: typeof TransactionsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppTransactionsRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
+interface AppRouteChildren {
+  AppBudgetsRoute: typeof AppBudgetsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppTransactionsRoute: typeof AppTransactionsRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppBudgetsRoute: AppBudgetsRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppTransactionsRoute: AppTransactionsRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  BudgetsRoute: BudgetsRoute,
-  SettingsRoute: SettingsRoute,
-  TransactionsRoute: TransactionsRoute,
+  AppRoute: AppRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

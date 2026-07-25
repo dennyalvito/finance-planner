@@ -47,6 +47,9 @@ test("shows selective chart skeletons before mounting overview charts", async ({
 test("collapses the desktop sidebar to icons and keeps the chart card content-sized", async ({
   page,
 }) => {
+  const pageErrors: Error[] = []
+  page.on("pageerror", (error) => pageErrors.push(error))
+
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()
@@ -98,6 +101,7 @@ test("collapses the desktop sidebar to icons and keeps the chart card content-si
   await expect(
     page.locator('[data-slot="sidebar"][data-state="collapsed"]')
   ).toBeVisible()
+  expect(pageErrors).toEqual([])
 })
 
 test("records and persists a transaction from the desktop dashboard", async ({

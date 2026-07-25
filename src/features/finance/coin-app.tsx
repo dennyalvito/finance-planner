@@ -1,7 +1,10 @@
 import {
+  createContext,
   lazy,
   startTransition,
   Suspense,
+  useCallback,
+  useContext,
   useEffect,
   useMemo,
   useState,
@@ -161,6 +164,23 @@ function getView(pathname: string): CoinView {
   return "overview"
 }
 
+type CoinAppContextValue = ReturnType<typeof useFinance> & {
+  openBudget: () => void
+  openTransaction: () => void
+}
+
+const CoinAppContext = createContext<CoinAppContextValue | null>(null)
+
+function useCoinApp() {
+  const context = useContext(CoinAppContext)
+
+  if (!context) {
+    throw new Error("Coin route pages must render inside CoinApp.")
+  }
+
+  return context
+}
+
 export function CoinApp() {
   const pathname = useLocation({
     select: (location) => location.pathname,
@@ -170,77 +190,108 @@ export function CoinApp() {
   const [transactionOpen, setTransactionOpen] = useState(false)
   const [budgetOpen, setBudgetOpen] = useState(false)
   const finance = useFinance()
+  const openTransaction = useCallback(() => setTransactionOpen(true), [])
+  const openBudget = useCallback(() => setBudgetOpen(true), [])
+  const contextValue = useMemo(
+    () => ({
+      ...finance,
+      openBudget,
+      openTransaction,
+    }),
+    [finance, openBudget, openTransaction]
+  )
 
   useEffect(() => {
     setIsInteractive(true)
   }, [])
 
-  const shared = {
-    categories: finance.categories,
-    transactions: finance.transactions,
-    budgets: finance.budgets,
-  }
+  return (
+    <CoinAppContext.Provider value={contextValue}>
+      <SidebarProvider>
+        <CoinSidebar view={view} onAdd={openTransaction} />
+        <SidebarInset
+          data-app-ready={isInteractive ? "true" : "false"}
+          aria-busy={!isInteractive}
+          inert={!isInteractive}
+          className="min-w-0 pb-24 md:pb-0"
+        >
+          <AppHeader view={view} onAdd={openTransaction} />
+          <div
+            key={view}
+            data-testid="route-stage"
+            data-view={view}
+            className="coin-route-enter mx-auto flex w-full max-w-384 flex-1 flex-col px-4 py-5 sm:px-6 md:py-7 xl:px-8"
+          >
+            <Outlet />
+          </div>
+        </SidebarInset>
+
+        <MobileDock view={view} onAdd={openTransaction} />
+        <TransactionDialog
+          open={transactionOpen}
+          onOpenChange={setTransactionOpen}
+          categories={finance.categories}
+          onCreateCategory={finance.createCategory}
+          onSubmit={finance.addTransaction}
+        />
+        <BudgetDialog
+          open={budgetOpen}
+          onOpenChange={setBudgetOpen}
+          categories={finance.categories}
+          onSubmit={finance.saveBudget}
+        />
+      </SidebarProvider>
+    </CoinAppContext.Provider>
+  )
+}
+
+export function OverviewPage() {
+  const finance = useCoinApp()
 
   return (
-    <SidebarProvider>
-      <CoinSidebar view={view} onAdd={() => setTransactionOpen(true)} />
-      <SidebarInset
-        data-app-ready={isInteractive ? "true" : "false"}
-        aria-busy={!isInteractive}
-        inert={!isInteractive}
-        className="min-w-0 pb-24 md:pb-0"
-      >
-        <AppHeader view={view} onAdd={() => setTransactionOpen(true)} />
-        <div
-          key={view}
-          data-testid="route-stage"
-          data-view={view}
-          className="coin-route-enter mx-auto flex w-full max-w-384 flex-1 flex-col px-4 py-5 sm:px-6 md:py-7 xl:px-8"
-        >
-          {view === "overview" && (
-            <OverviewView
-              {...shared}
-              onAdd={() => setTransactionOpen(true)}
-              onBudget={() => setBudgetOpen(true)}
-              onDelete={finance.deleteTransaction}
-              onClearDemo={finance.clearDemoTransactions}
-            />
-          )}
-          {view === "transactions" && (
-            <TransactionsView
-              categories={finance.categories}
-              transactions={finance.transactions}
-              onAdd={() => setTransactionOpen(true)}
-              onDelete={finance.deleteTransaction}
-              onClearDemo={finance.clearDemoTransactions}
-            />
-          )}
-          {view === "budgets" && (
-            <BudgetsView {...shared} onBudget={() => setBudgetOpen(true)} />
-          )}
-          {view === "settings" && (
-            <SettingsView categories={finance.categories} />
-          )}
-        </div>
-      </SidebarInset>
-
-      <MobileDock view={view} onAdd={() => setTransactionOpen(true)} />
-      <TransactionDialog
-        open={transactionOpen}
-        onOpenChange={setTransactionOpen}
-        categories={finance.categories}
-        onCreateCategory={finance.createCategory}
-        onSubmit={finance.addTransaction}
-      />
-      <BudgetDialog
-        open={budgetOpen}
-        onOpenChange={setBudgetOpen}
-        categories={finance.categories}
-        onSubmit={finance.saveBudget}
-      />
-      <Outlet />
-    </SidebarProvider>
+    <OverviewView
+      categories={finance.categories}
+      transactions={finance.transactions}
+      budgets={finance.budgets}
+      onAdd={finance.openTransaction}
+      onBudget={finance.openBudget}
+      onDelete={finance.deleteTransaction}
+      onClearDemo={finance.clearDemoTransactions}
+    />
   )
+}
+
+export function TransactionsPage() {
+  const finance = useCoinApp()
+
+  return (
+    <TransactionsView
+      categories={finance.categories}
+      transactions={finance.transactions}
+      onAdd={finance.openTransaction}
+      onDelete={finance.deleteTransaction}
+      onClearDemo={finance.clearDemoTransactions}
+    />
+  )
+}
+
+export function BudgetsPage() {
+  const finance = useCoinApp()
+
+  return (
+    <BudgetsView
+      categories={finance.categories}
+      transactions={finance.transactions}
+      budgets={finance.budgets}
+      onBudget={finance.openBudget}
+    />
+  )
+}
+
+export function SettingsPage() {
+  const finance = useCoinApp()
+
+  return <SettingsView categories={finance.categories} />
 }
 
 function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
@@ -273,7 +324,7 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
                       size="lg"
                       className="group-data-[collapsible=icon]:justify-center"
                     >
-                      <Link to={item.to} preload="render">
+                      <Link to={item.to}>
                         <Icon aria-hidden="true" />
                         <span className="group-data-[collapsible=icon]:sr-only">
                           {item.label}
@@ -441,7 +492,6 @@ function DockLink({
   return (
     <Link
       to={item.to}
-      preload="render"
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex min-w-0 touch-manipulation flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[0.66rem] font-medium text-muted-foreground active:bg-secondary active:text-foreground",
