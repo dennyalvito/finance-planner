@@ -166,7 +166,7 @@ export function TransactionDialog({
               onValueChange={(value) => {
                 if (value) setType(value as TransactionType)
               }}
-              variant="outline"
+              variant="selection"
               spacing={2}
               aria-labelledby="transaction-type"
               className="grid w-full grid-cols-2"
@@ -209,7 +209,7 @@ export function TransactionDialog({
               onValueChange={(value) => {
                 if (value) setCategoryId(value)
               }}
-              variant="outline"
+              variant="selection"
               aria-labelledby="quick-category"
               aria-invalid={categoryInvalid}
               className="flex w-full flex-wrap justify-start"
@@ -323,7 +323,7 @@ export function TransactionDialog({
               onValueChange={(value) => {
                 if (value) setType(value as TransactionType)
               }}
-              variant="outline"
+              variant="selection"
               spacing={2}
               aria-labelledby="transaction-type"
             >

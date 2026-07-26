@@ -134,6 +134,39 @@ const SpendingChart = lazy(() =>
   }))
 )
 
+let overviewChartsPrimed = false
+
+function useOverviewChartsReady() {
+  const [ready, setReady] = useState(overviewChartsPrimed)
+
+  useEffect(() => {
+    if (ready) return
+
+    const requestIdle = Reflect.get(window, "requestIdleCallback") as
+      | ((
+          callback: IdleRequestCallback,
+          options?: IdleRequestOptions
+        ) => number)
+      | undefined
+    const cancelIdle = Reflect.get(window, "cancelIdleCallback") as
+      ((handle: number) => void) | undefined
+    const markReady = () => {
+      overviewChartsPrimed = true
+      startTransition(() => setReady(true))
+    }
+
+    if (requestIdle) {
+      const handle = requestIdle.call(window, markReady, { timeout: 400 })
+      return () => cancelIdle?.call(window, handle)
+    }
+
+    const timeout = window.setTimeout(markReady, 220)
+    return () => window.clearTimeout(timeout)
+  }, [ready])
+
+  return ready
+}
+
 export type CoinView = "overview" | "transactions" | "budgets" | "settings"
 
 const navigation: Array<{
@@ -195,7 +228,13 @@ type CoinAppContextValue = ReturnType<typeof useFinance> & {
   openTransaction: () => void
 }
 
+type TransactionOverlayContextValue = {
+  openTransaction: () => void
+}
+
 const CoinAppContext = createContext<CoinAppContextValue | null>(null)
+const TransactionOverlayContext =
+  createContext<TransactionOverlayContextValue | null>(null)
 
 function useCoinApp() {
   const context = useContext(CoinAppContext)
@@ -207,18 +246,74 @@ function useCoinApp() {
   return context
 }
 
+function useTransactionOverlay() {
+  const context = useContext(TransactionOverlayContext)
+
+  if (!context) {
+    throw new Error(
+      "Transaction actions must render inside TransactionOverlayProvider."
+    )
+  }
+
+  return context
+}
+
+function TransactionOverlayProvider({
+  categories,
+  children,
+  onCreateCategory,
+  onSubmit,
+}: {
+  categories: Category[]
+  children: React.ReactNode
+  onCreateCategory: (
+    name: string,
+    type: FinanceTransaction["type"]
+  ) => Promise<Category>
+  onSubmit: ReturnType<typeof useFinance>["addTransaction"]
+}) {
+  const [open, setOpen] = useState(false)
+  const openTransaction = useCallback(() => setOpen(true), [])
+  const value = useMemo(() => ({ openTransaction }), [openTransaction])
+
+  return (
+    <TransactionOverlayContext.Provider value={value}>
+      {children}
+      <TransactionDialog
+        open={open}
+        onOpenChange={setOpen}
+        categories={categories}
+        onCreateCategory={onCreateCategory}
+        onSubmit={onSubmit}
+      />
+    </TransactionOverlayContext.Provider>
+  )
+}
+
 export function CoinApp() {
+  const finance = useFinance()
+
+  return (
+    <TransactionOverlayProvider
+      categories={finance.categories}
+      onCreateCategory={finance.createCategory}
+      onSubmit={finance.addTransaction}
+    >
+      <CoinAppShell finance={finance} />
+    </TransactionOverlayProvider>
+  )
+}
+
+function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   const pathname = useLocation({
     select: (location) => location.pathname,
   })
   const view = getView(pathname)
   const [isInteractive, setIsInteractive] = useState(false)
-  const [transactionOpen, setTransactionOpen] = useState(false)
   const [budgetOpen, setBudgetOpen] = useState(false)
   const [signInOpen, setSignInOpen] = useState(false)
-  const finance = useFinance()
+  const { openTransaction } = useTransactionOverlay()
   const appReady = isInteractive && !finance.isLoading
-  const openTransaction = useCallback(() => setTransactionOpen(true), [])
   const openBudget = useCallback(() => setBudgetOpen(true), [])
   const openSignIn = useCallback(() => setSignInOpen(true), [])
   const contextValue = useMemo(
@@ -261,13 +356,6 @@ export function CoinApp() {
         </SidebarInset>
 
         <MobileDock view={view} onAdd={openTransaction} />
-        <TransactionDialog
-          open={transactionOpen}
-          onOpenChange={setTransactionOpen}
-          categories={finance.categories}
-          onCreateCategory={finance.createCategory}
-          onSubmit={finance.addTransaction}
-        />
         <BudgetDialog
           open={budgetOpen}
           onOpenChange={setBudgetOpen}
@@ -594,7 +682,7 @@ function DockLink({
     <Link
       to={item.to}
       aria-current={active ? "page" : undefined}
-      className="flex min-w-0 touch-manipulation flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[0.66rem] font-medium text-muted-foreground active:text-foreground"
+      className="flex min-w-0 touch-manipulation flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[0.66rem] font-medium text-muted-foreground transition-[color,transform] duration-75 active:scale-[0.96] active:text-foreground"
     >
       <Icon
         aria-hidden="true"
@@ -691,7 +779,7 @@ function OverviewView({
   onClearDemo: () => Promise<void>
 }) {
   const isMobile = useIsMobile()
-  const [chartsReady, setChartsReady] = useState(false)
+  const chartsReady = useOverviewChartsReady()
   const [period, setPeriod] = useState<PeriodPreset>("month")
   const [periodOpen, setPeriodOpen] = useState(false)
   const initialCustomRange = useMemo(
@@ -735,16 +823,6 @@ function OverviewView({
     [transactions, budgets]
   )
   const topCategoryName = spending.length > 0 ? spending[0].name : "No expenses"
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      startTransition(() => {
-        setChartsReady(true)
-      })
-    }, 160)
-
-    return () => window.clearTimeout(timeout)
-  }, [])
 
   return (
     <div className="flex flex-col gap-6">
