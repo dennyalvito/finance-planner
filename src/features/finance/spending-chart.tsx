@@ -28,7 +28,13 @@ const fills = [
   "var(--color-fifth)",
 ]
 
-export function SpendingChart({ data }: { data: CategorySpending[] }) {
+export function SpendingChart({
+  data,
+  compact = false,
+}: {
+  data: CategorySpending[]
+  compact?: boolean
+}) {
   const total = data.reduce((sum, item) => sum + item.value, 0)
   const chartData = data.slice(0, 5).map((item, index) => ({
     ...item,
@@ -37,17 +43,27 @@ export function SpendingChart({ data }: { data: CategorySpending[] }) {
 
   if (!chartData.length) {
     return (
-      <div className="flex h-44 items-center justify-center text-sm text-muted-foreground">
+      <div
+        className={
+          compact
+            ? "flex size-36 items-center justify-center text-center text-xs text-muted-foreground"
+            : "flex h-44 items-center justify-center text-sm text-muted-foreground"
+        }
+      >
         No expense data yet
       </div>
     )
   }
 
   return (
-    <div className="relative mx-auto size-44">
+    <div
+      className={
+        compact ? "relative mx-auto size-36" : "relative mx-auto size-44"
+      }
+    >
       <ChartContainer
         config={chartConfig}
-        className="size-44"
+        className={compact ? "size-36" : "size-44"}
         data-testid="spending-chart"
       >
         <PieChart accessibilityLayer>
@@ -62,15 +78,21 @@ export function SpendingChart({ data }: { data: CategorySpending[] }) {
             data={chartData}
             dataKey="value"
             nameKey="name"
-            innerRadius={52}
-            outerRadius={78}
+            innerRadius={compact ? 42 : 52}
+            outerRadius={compact ? 64 : 78}
             strokeWidth={3}
           />
         </PieChart>
       </ChartContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
         <span className="text-xs text-muted-foreground">Spent</span>
-        <span className="text-sm font-semibold tabular-nums">
+        <span
+          className={
+            compact
+              ? "text-xs font-semibold tabular-nums"
+              : "text-sm font-semibold tabular-nums"
+          }
+        >
           {formatCompactRupiah(total)}
         </span>
       </div>

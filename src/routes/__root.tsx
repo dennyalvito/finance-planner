@@ -32,7 +32,7 @@ export const Route = createRootRoute({
       },
       {
         name: "theme-color",
-        content: "#f4efe3",
+        content: "#0d100e",
       },
     ],
     links: [
@@ -62,11 +62,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="min-h-svh antialiased">
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark">
           <AuthProvider>
             <TooltipProvider>
               {children}
-              <Toaster position="bottom-right" richColors />
+              <Toaster position="top-center" richColors />
             </TooltipProvider>
           </AuthProvider>
         </ThemeProvider>

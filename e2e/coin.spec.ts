@@ -9,8 +9,9 @@ test("keeps chart tooltips stable for display labels outside the chart config", 
   await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()
 
-  const cashFlowChart = page.getByTestId("cash-flow-chart")
-  const spendingChart = page.getByTestId("spending-chart")
+  const desktopOverview = page.getByTestId("desktop-overview")
+  const cashFlowChart = desktopOverview.getByTestId("cash-flow-chart")
+  const spendingChart = desktopOverview.getByTestId("spending-chart")
 
   await cashFlowChart.hover({ position: { x: 240, y: 130 } })
   await spendingChart.hover({ position: { x: 88, y: 30 } })
@@ -25,8 +26,9 @@ test("shows selective chart skeletons before mounting overview charts", async ({
   await page.goto("/budgets")
   await page.locator('[data-app-ready="true"]').waitFor()
 
-  const cashFlowSkeleton = page.getByTestId("cash-flow-skeleton")
-  const spendingSkeleton = page.getByTestId("spending-skeleton")
+  const desktopOverview = page.getByTestId("desktop-overview")
+  const cashFlowSkeleton = desktopOverview.getByTestId("cash-flow-skeleton")
+  const spendingSkeleton = desktopOverview.getByTestId("spending-skeleton")
   const skeletonsAppeared = Promise.all([
     cashFlowSkeleton.waitFor({ state: "visible" }),
     spendingSkeleton.waitFor({ state: "visible" }),
@@ -38,8 +40,8 @@ test("shows selective chart skeletons before mounting overview charts", async ({
   await skeletonsAppeared
 
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByTestId("cash-flow-chart")).toBeVisible()
-  await expect(page.getByTestId("spending-chart")).toBeVisible()
+  await expect(desktopOverview.getByTestId("cash-flow-chart")).toBeVisible()
+  await expect(desktopOverview.getByTestId("spending-chart")).toBeVisible()
   await expect(cashFlowSkeleton).toHaveCount(0)
   await expect(spendingSkeleton).toHaveCount(0)
 })
@@ -110,7 +112,11 @@ test("records and persists a transaction from the desktop dashboard", async ({
   await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()
 
-  await expect(page.getByText("Recorded net", { exact: true })).toBeVisible()
+  await expect(
+    page.getByTestId("desktop-overview").getByText("Net cash flow", {
+      exact: true,
+    })
+  ).toBeVisible()
   await expect(page.getByRole("link", { name: "Transactions" })).toBeVisible()
 
   await page.getByTestId("add-transaction-desktop").click()
@@ -125,12 +131,16 @@ test("records and persists a transaction from the desktop dashboard", async ({
     .click()
 
   await expect(page.getByText("Transaction added")).toBeVisible()
-  await expect(page.getByText("Fresh groceries")).toBeVisible()
+  await expect(
+    page.getByTestId("desktop-overview").getByText("Fresh groceries")
+  ).toBeVisible()
   await expect(page.getByText("Example data")).toHaveCount(0)
 
   await page.reload()
   await page.locator('[data-app-ready="true"]').waitFor()
-  await expect(page.getByText("Fresh groceries")).toBeVisible()
+  await expect(
+    page.getByTestId("desktop-overview").getByText("Fresh groceries")
+  ).toBeVisible()
 })
 
 test("uses a bottom dock and transaction drawer on mobile", async ({
@@ -142,14 +152,59 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
 
   await expect(page.getByTestId("mobile-dock")).toBeVisible()
   await expect(page.getByTestId("add-transaction-desktop")).toBeHidden()
+  await expect(
+    page.getByRole("heading", { name: "Net cash flow" })
+  ).toBeVisible()
+  await expect(page.getByTestId("cash-flow-card")).toBeHidden()
+
+  const activeHome = page.getByRole("link", { name: "Home" })
+  await expect(activeHome).toHaveAttribute("aria-current", "page")
+  await expect(activeHome).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+
+  await page
+    .getByRole("button", { name: "Change period, currently This month" })
+    .click()
+  await expect(page.getByTestId("period-filter-drawer")).toBeVisible()
+  await page.getByRole("radio", { name: "Custom" }).click()
+  await page.getByLabel("From").fill("2026-07-10")
+  await page.getByLabel("To").fill("2026-07-20")
+  await page.getByRole("button", { name: "Apply custom period" }).click()
+  await expect(
+    page.getByRole("button", {
+      name: "Change period, currently 10 Jul – 20 Jul",
+    })
+  ).toBeVisible()
+
+  await page
+    .getByRole("button", {
+      name: "Change period, currently 10 Jul – 20 Jul",
+    })
+    .click()
+  await page.getByRole("radio", { name: "Today" }).click()
+  await expect(
+    page.getByRole("button", { name: "Change period, currently Today" })
+  ).toBeVisible()
 
   await page.getByTestId("add-transaction-mobile").click()
   await expect(page.getByTestId("transaction-drawer")).toBeVisible()
   await expect(
-    page.getByRole("heading", { name: "Add a transaction" })
+    page.getByRole("heading", { name: "Add transaction" })
   ).toBeVisible()
 
-  await page.getByRole("button", { name: "Cancel" }).click()
+  const drawerBox = await page.getByTestId("transaction-drawer").boundingBox()
+  expect(drawerBox).not.toBeNull()
+  expect(drawerBox!.height).toBeLessThan(844 * 0.8)
+
+  await page.getByLabel("Amount").fill("125000")
+  await page.getByRole("radio", { name: "Food & dining" }).click()
+  await page.getByRole("button", { name: "Save transaction" }).click()
+  await expect(page.getByText("Transaction added")).toBeVisible()
+  await expect(
+    page
+      .getByTestId("mobile-recent-activity")
+      .getByText("Food & dining", { exact: true })
+  ).toBeVisible()
+
   await page.getByRole("link", { name: "Budgets" }).click()
   await expect(page).toHaveURL(/\/budgets$/)
   await expect(page.getByRole("heading", { name: "Budgets" })).toBeVisible()

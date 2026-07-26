@@ -12,11 +12,11 @@ import type { CashFlowPoint } from "@/domain/finance"
 const chartConfig = {
   income: {
     label: "Income",
-    color: "var(--chart-2)",
+    color: "var(--positive)",
   },
   expense: {
     label: "Expense",
-    color: "var(--chart-3)",
+    color: "var(--negative)",
   },
 } satisfies ChartConfig
 
