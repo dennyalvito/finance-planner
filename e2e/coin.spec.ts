@@ -190,13 +190,40 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await expect(
     page.getByRole("heading", { name: "Add transaction" })
   ).toBeVisible()
+  const drawerBackdrop = await page
+    .locator('[data-slot="drawer-overlay"]')
+    .evaluate((element) => window.getComputedStyle(element).backdropFilter)
+  expect(drawerBackdrop).toBe("none")
 
   const drawerBox = await page.getByTestId("transaction-drawer").boundingBox()
   expect(drawerBox).not.toBeNull()
   expect(drawerBox!.height).toBeLessThan(844 * 0.8)
 
+  const expenseType = page.getByRole("radio", { name: "Expense" })
+  const incomeType = page.getByRole("radio", { name: "Income" })
+  await expect(expenseType).toHaveAttribute("data-state", "on")
+  const selectedTypeColors = await expenseType.evaluate((element) => {
+    const styles = window.getComputedStyle(element)
+
+    return {
+      background: styles.backgroundColor,
+      foreground: styles.color,
+    }
+  })
+  const unselectedTypeColors = await incomeType.evaluate((element) => {
+    const styles = window.getComputedStyle(element)
+
+    return {
+      background: styles.backgroundColor,
+      foreground: styles.color,
+    }
+  })
+  expect(selectedTypeColors).not.toEqual(unselectedTypeColors)
+
   await page.getByLabel("Amount").fill("125000")
-  await page.getByRole("radio", { name: "Food & dining" }).click()
+  const foodCategory = page.getByRole("radio", { name: "Food & dining" })
+  await foodCategory.click()
+  await expect(foodCategory).toHaveAttribute("data-state", "on")
   await page.getByRole("button", { name: "Save transaction" }).click()
   await expect(page.getByText("Transaction added")).toBeVisible()
   await expect(
@@ -212,6 +239,17 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
     "data-view",
     "budgets"
   )
+  await page.getByRole("button", { name: "Add budget" }).click()
+  await expect(page.getByTestId("budget-drawer")).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Set a monthly budget" })
+  ).toBeVisible()
+  await page.getByLabel("Expense category").click()
+  await page.getByRole("option", { name: "Food & dining" }).click()
+  await page.getByLabel("Monthly limit in IDR").fill("2000000")
+  await page.getByRole("button", { name: "Save budget" }).click()
+  await expect(page.getByText("Budget saved")).toBeVisible()
+
   const animation = await page
     .getByTestId("route-stage")
     .evaluate((element) => {
@@ -223,7 +261,7 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
       }
     })
   expect(animation).toEqual({
-    duration: "0.14s",
+    duration: "0.1s",
     name: "coin-route-enter",
   })
 
