@@ -13,7 +13,9 @@ import { Link, Outlet, useLocation } from "@tanstack/react-router"
 import {
   ArrowDownLeftIcon,
   ArrowUpRightIcon,
+  CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  ChevronDownIcon,
   CircleDollarSignIcon,
   CloudIcon,
   GaugeIcon,
@@ -21,12 +23,12 @@ import {
   LayoutDashboardIcon,
   LogInIcon,
   LogOutIcon,
-  MoreHorizontalIcon,
   PlusIcon,
   ReceiptTextIcon,
   Settings2Icon,
   ShapesIcon,
   Trash2Icon,
+  UserRoundIcon,
   WalletCardsIcon,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -65,6 +67,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -94,13 +106,20 @@ import {
   monthKey,
   summarizeLedger,
 } from "@/domain/finance"
-import type { Budget, Category, FinanceTransaction } from "@/domain/finance"
+import type {
+  Budget,
+  Category,
+  CategorySpending,
+  FinanceTransaction,
+  LedgerSummary,
+} from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
 import { SignInDialog } from "@/features/auth/sign-in-dialog"
 import { BudgetDialog } from "@/features/finance/budget-dialog"
 import { getCategoryIcon } from "@/features/finance/category-icon"
 import { TransactionDialog } from "@/features/finance/transaction-dialog"
 import { useFinance } from "@/features/finance/use-finance"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
 const CashFlowChart = lazy(() =>
@@ -148,7 +167,7 @@ const navigation: Array<{
   {
     view: "settings",
     label: "Categories & settings",
-    shortLabel: "More",
+    shortLabel: "Profile",
     to: "/settings",
     icon: Settings2Icon,
   },
@@ -540,7 +559,7 @@ function MobileDock({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
     <nav
       aria-label="Primary navigation"
       data-testid="mobile-dock"
-      className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 items-center rounded-2xl border bg-background/95 px-2 py-2 shadow-xl shadow-foreground/10 backdrop-blur-xl md:hidden"
+      className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 items-center rounded-2xl border bg-card/95 px-2 py-2 shadow-xl shadow-black/30 backdrop-blur-xl md:hidden"
     >
       {first.map((item) => (
         <DockLink key={item.view} item={item} active={view === item.view} />
@@ -570,20 +589,85 @@ function DockLink({
   item: (typeof navigation)[number]
   active: boolean
 }) {
-  const Icon = item.view === "settings" ? MoreHorizontalIcon : item.icon
+  const Icon = item.view === "settings" ? UserRoundIcon : item.icon
   return (
     <Link
       to={item.to}
       aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex min-w-0 touch-manipulation flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[0.66rem] font-medium text-muted-foreground active:bg-secondary active:text-foreground",
-        active && "bg-secondary text-foreground"
-      )}
+      className="flex min-w-0 touch-manipulation flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[0.66rem] font-medium text-muted-foreground active:text-foreground"
     >
-      <Icon aria-hidden="true" className="size-4" />
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "size-4 transition-[color,transform,stroke-width] duration-150",
+          active && "-translate-y-0.5 stroke-[2.5] text-primary"
+        )}
+      />
       <span className="truncate">{item.shortLabel}</span>
     </Link>
   )
+}
+
+type PeriodPreset = "day" | "week" | "month" | "year" | "custom"
+
+type DateRange = {
+  from: string
+  to: string
+}
+
+const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
+  { value: "day", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "year", label: "This year" },
+  { value: "custom", label: "Custom" },
+]
+
+function dateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-")
+}
+
+function getPeriodRange(
+  period: PeriodPreset,
+  customRange: DateRange,
+  now = new Date()
+): DateRange {
+  if (period === "custom") return customRange
+
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const to = new Date(from)
+
+  if (period === "week") {
+    const mondayOffset = (from.getDay() + 6) % 7
+    from.setDate(from.getDate() - mondayOffset)
+    to.setDate(from.getDate() + 6)
+  } else if (period === "month") {
+    from.setDate(1)
+    to.setMonth(to.getMonth() + 1, 0)
+  } else if (period === "year") {
+    from.setMonth(0, 1)
+    to.setMonth(11, 31)
+  }
+
+  return { from: dateKey(from), to: dateKey(to) }
+}
+
+function getPeriodLabel(period: PeriodPreset, range: DateRange) {
+  if (period !== "custom") {
+    return periodOptions.find((option) => option.value === period)?.label ?? ""
+  }
+
+  const format = (date: string) =>
+    new Date(`${date}T00:00:00`).toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+    })
+
+  return `${format(range.from)} – ${format(range.to)}`
 }
 
 type FinanceViewProps = {
@@ -606,8 +690,33 @@ function OverviewView({
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
 }) {
+  const isMobile = useIsMobile()
   const [chartsReady, setChartsReady] = useState(false)
+  const [period, setPeriod] = useState<PeriodPreset>("month")
+  const [periodOpen, setPeriodOpen] = useState(false)
+  const initialCustomRange = useMemo(
+    () => getPeriodRange("month", { from: "", to: "" }),
+    []
+  )
+  const [customRange, setCustomRange] = useState<DateRange>(initialCustomRange)
+  const activeRange = useMemo(
+    () => getPeriodRange(period, customRange),
+    [customRange, period]
+  )
+  const mobileTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          transaction.date >= activeRange.from &&
+          transaction.date <= activeRange.to
+      ),
+    [activeRange, transactions]
+  )
   const summary = useMemo(() => summarizeLedger(transactions), [transactions])
+  const mobileSummary = useMemo(
+    () => summarizeLedger(mobileTransactions),
+    [mobileTransactions]
+  )
   const series = useMemo(
     () => (chartsReady ? buildCashFlowSeries(transactions) : []),
     [chartsReady, transactions]
@@ -615,6 +724,11 @@ function OverviewView({
   const spending = useMemo(
     () => (chartsReady ? buildCategorySpending(transactions, categories) : []),
     [categories, chartsReady, transactions]
+  )
+  const mobileSpending = useMemo(
+    () =>
+      chartsReady ? buildCategorySpending(mobileTransactions, categories) : [],
+    [categories, chartsReady, mobileTransactions]
   )
   const budget = useMemo(
     () => calculateBudgetProgress(transactions, budgets),
@@ -634,150 +748,429 @@ function OverviewView({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeading eyebrow="Today" />
+      <MobileOverview
+        categories={categories}
+        transactions={mobileTransactions}
+        summary={mobileSummary}
+        spending={mobileSpending}
+        chartsReady={chartsReady && isMobile}
+        period={period}
+        periodLabel={getPeriodLabel(period, activeRange)}
+        periodOpen={periodOpen}
+        customRange={customRange}
+        onPeriodOpenChange={setPeriodOpen}
+        onPeriodChange={setPeriod}
+        onCustomRangeChange={setCustomRange}
+        onDelete={onDelete}
+      />
 
-      <section
-        aria-label="Financial summary"
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      <div
+        data-testid="desktop-overview"
+        className="hidden flex-col gap-6 md:flex"
       >
-        <Card className="overflow-hidden bg-primary text-primary-foreground sm:col-span-2 xl:col-span-1">
-          <CardHeader>
-            <CardTitle>Recorded net</CardTitle>
-            <CardDescription className="text-primary-foreground/65">
-              Income minus expenses
-            </CardDescription>
-            <CardAction>
-              <ChartNoAxesCombinedIcon aria-hidden="true" />
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold tracking-[-0.04em] tabular-nums sm:text-4xl">
-              {formatRupiah(summary.net)}
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Badge variant="secondary">From recorded entries</Badge>
-          </CardFooter>
-        </Card>
-        <MetricCard
-          title="Income"
-          description="All recorded income"
-          value={summary.income}
-          icon={ArrowDownLeftIcon}
-        />
-        <MetricCard
-          title="Expenses"
-          description="All recorded expenses"
-          value={summary.expenses}
-          icon={ArrowUpRightIcon}
-        />
-        <MetricCard
-          title="Keep rate"
-          description="Recorded net over income"
-          value={`${Math.round(summary.savingsRate)}%`}
-          icon={WalletCardsIcon}
-        />
-      </section>
+        <PageHeading eyebrow="Today" />
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,0.8fr)]">
-        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
-          <Card
-            data-testid="cash-flow-card"
-            aria-busy={!chartsReady}
-            className="min-w-0 self-start lg:row-span-2"
-          >
+        <section
+          aria-label="Financial summary"
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <Card className="overflow-hidden sm:col-span-2 xl:col-span-1">
             <CardHeader>
-              <CardTitle>Cash-flow rhythm</CardTitle>
-              <CardDescription>
-                Income and expenses over six months.
-              </CardDescription>
+              <CardTitle>Net cash flow</CardTitle>
+              <CardDescription>Income minus expenses</CardDescription>
               <CardAction>
-                <Badge variant="outline">IDR</Badge>
+                <ChartNoAxesCombinedIcon aria-hidden="true" />
               </CardAction>
             </CardHeader>
-            <CardContent className="min-w-0">
-              {chartsReady ? (
-                <Suspense fallback={<CashFlowSkeleton />}>
-                  <CashFlowChart data={series} />
-                </Suspense>
-              ) : (
-                <CashFlowSkeleton />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card aria-busy={!chartsReady}>
-            <CardHeader>
-              <CardTitle>Spending overview</CardTitle>
-              <CardDescription>
-                Where expenses are concentrated.
-              </CardDescription>
-            </CardHeader>
             <CardContent>
-              {chartsReady ? (
-                <Suspense fallback={<SpendingSkeleton />}>
-                  <SpendingChart data={spending} />
-                </Suspense>
-              ) : (
-                <SpendingSkeleton />
-              )}
-            </CardContent>
-            <CardFooter className="justify-between">
-              <span className="text-sm text-muted-foreground">
-                Top category
-              </span>
-              {chartsReady ? (
-                <span className="text-sm font-medium">{topCategoryName}</span>
-              ) : (
-                <Skeleton aria-hidden="true" className="h-4 w-20" />
-              )}
-            </CardFooter>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Budget pulse</CardTitle>
-              <CardDescription>
-                {budget.configured
-                  ? "This month's selected limits."
-                  : "No limits set this month."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <div className="flex items-end justify-between gap-4">
-                <p className="text-2xl font-semibold tracking-[-0.03em] tabular-nums">
-                  {formatCompactRupiah(budget.spent)}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  of {formatCompactRupiah(budget.limit)}
-                </p>
-              </div>
-              <Progress
-                value={budget.percentage}
-                aria-label="Monthly budget used"
-              />
+              <p className="text-3xl font-semibold tracking-[-0.04em] tabular-nums sm:text-4xl">
+                {formatCompactRupiah(summary.net)}
+              </p>
             </CardContent>
             <CardFooter>
-              <Button variant="outline" size="sm" onClick={onBudget}>
-                <GaugeIcon data-icon="inline-start" />
-                {budget.configured ? "Adjust budget" : "Set a budget"}
-              </Button>
+              <Badge variant="secondary">From recorded entries</Badge>
             </CardFooter>
           </Card>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-4">
-          <QuickActions onAdd={onAdd} onBudget={onBudget} />
-          <RecentTransactions
-            categories={categories}
-            transactions={transactions.slice(0, 5)}
-            onDelete={onDelete}
-            onClearDemo={onClearDemo}
-            compact
+          <MetricCard
+            title="Income"
+            description="All recorded income"
+            value={summary.income}
+            icon={ArrowDownLeftIcon}
           />
+          <MetricCard
+            title="Expenses"
+            description="All recorded expenses"
+            value={summary.expenses}
+            icon={ArrowUpRightIcon}
+          />
+          <MetricCard
+            title="Keep rate"
+            description="Recorded net over income"
+            value={`${Math.round(summary.savingsRate)}%`}
+            icon={WalletCardsIcon}
+          />
+        </section>
+
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,0.8fr)]">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
+            <Card
+              data-testid="cash-flow-card"
+              aria-busy={!chartsReady}
+              className="min-w-0 self-start lg:row-span-2"
+            >
+              <CardHeader>
+                <CardTitle>Cash-flow rhythm</CardTitle>
+                <CardDescription>
+                  Income and expenses over six months.
+                </CardDescription>
+                <CardAction>
+                  <Badge variant="outline">IDR</Badge>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="min-w-0">
+                {chartsReady && !isMobile ? (
+                  <Suspense fallback={<CashFlowSkeleton />}>
+                    <CashFlowChart data={series} />
+                  </Suspense>
+                ) : (
+                  <CashFlowSkeleton />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card aria-busy={!chartsReady}>
+              <CardHeader>
+                <CardTitle>Spending overview</CardTitle>
+                <CardDescription>
+                  Where expenses are concentrated.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {chartsReady && !isMobile ? (
+                  <Suspense fallback={<SpendingSkeleton />}>
+                    <SpendingChart data={spending} />
+                  </Suspense>
+                ) : (
+                  <SpendingSkeleton />
+                )}
+              </CardContent>
+              <CardFooter className="justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Top category
+                </span>
+                {chartsReady && !isMobile ? (
+                  <span className="text-sm font-medium">{topCategoryName}</span>
+                ) : (
+                  <Skeleton aria-hidden="true" className="h-4 w-20" />
+                )}
+              </CardFooter>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Budget pulse</CardTitle>
+                <CardDescription>
+                  {budget.configured
+                    ? "This month's selected limits."
+                    : "No limits set this month."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <div className="flex items-end justify-between gap-4">
+                  <p className="text-2xl font-semibold tracking-[-0.03em] tabular-nums">
+                    {formatCompactRupiah(budget.spent)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    of {formatCompactRupiah(budget.limit)}
+                  </p>
+                </div>
+                <Progress
+                  value={budget.percentage}
+                  aria-label="Monthly budget used"
+                />
+              </CardContent>
+              <CardFooter>
+                <Button variant="outline" size="sm" onClick={onBudget}>
+                  <GaugeIcon data-icon="inline-start" />
+                  {budget.configured ? "Adjust budget" : "Set a budget"}
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-4">
+            <QuickActions onAdd={onAdd} onBudget={onBudget} />
+            <RecentTransactions
+              categories={categories}
+              transactions={transactions.slice(0, 5)}
+              onDelete={onDelete}
+              onClearDemo={onClearDemo}
+              compact
+            />
+          </div>
         </div>
       </div>
     </div>
+  )
+}
+
+const chartDotClasses = [
+  "bg-chart-1",
+  "bg-chart-2",
+  "bg-chart-3",
+  "bg-chart-4",
+  "bg-chart-5",
+]
+
+function MobileOverview({
+  categories,
+  transactions,
+  summary,
+  spending,
+  chartsReady,
+  period,
+  periodLabel,
+  periodOpen,
+  customRange,
+  onPeriodOpenChange,
+  onPeriodChange,
+  onCustomRangeChange,
+  onDelete,
+}: {
+  categories: Category[]
+  transactions: FinanceTransaction[]
+  summary: LedgerSummary
+  spending: CategorySpending[]
+  chartsReady: boolean
+  period: PeriodPreset
+  periodLabel: string
+  periodOpen: boolean
+  customRange: DateRange
+  onPeriodOpenChange: (open: boolean) => void
+  onPeriodChange: (period: PeriodPreset) => void
+  onCustomRangeChange: (range: DateRange) => void
+  onDelete: (id: string) => Promise<void>
+}) {
+  const totalSpent = spending.reduce((total, item) => total + item.value, 0)
+
+  return (
+    <section
+      aria-label="Mobile financial overview"
+      className="flex flex-col gap-5 md:hidden"
+    >
+      <Card data-testid="mobile-net-cash-flow">
+        <CardHeader>
+          <CardTitle>
+            <h1>Net cash flow</h1>
+          </CardTitle>
+          <CardDescription>Income minus expenses</CardDescription>
+          <CardAction>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={`Change period, currently ${periodLabel}`}
+              onClick={() => onPeriodOpenChange(true)}
+            >
+              <CalendarDaysIcon data-icon="inline-start" />
+              {periodLabel}
+              <ChevronDownIcon data-icon="inline-end" />
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-semibold tracking-[-0.045em] tabular-nums">
+            {formatRupiah(summary.net)}
+          </p>
+        </CardContent>
+        <CardFooter className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg bg-card p-3">
+            <p className="text-xs text-muted-foreground">Income</p>
+            <p className="mt-1 font-semibold text-positive tabular-nums">
+              +{formatCompactRupiah(summary.income)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-card p-3">
+            <p className="text-xs text-muted-foreground">Expenses</p>
+            <p className="mt-1 font-semibold text-negative tabular-nums">
+              -{formatCompactRupiah(summary.expenses)}
+            </p>
+          </div>
+        </CardFooter>
+      </Card>
+
+      <Card aria-busy={!chartsReady}>
+        <CardHeader>
+          <CardTitle>Where it went</CardTitle>
+          <CardDescription>{periodLabel}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-3">
+          {chartsReady ? (
+            <Suspense fallback={<SpendingSkeleton compact />}>
+              <SpendingChart data={spending} compact />
+            </Suspense>
+          ) : (
+            <SpendingSkeleton compact />
+          )}
+          <div className="flex min-w-0 flex-col gap-2">
+            {spending.slice(0, 5).map((item, index) => (
+              <div
+                key={item.categoryId}
+                className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2"
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn("size-2 rounded-full", chartDotClasses[index])}
+                />
+                <span className="truncate text-xs text-muted-foreground">
+                  {item.name}
+                </span>
+                <span className="text-xs font-medium tabular-nums">
+                  {totalSpent > 0
+                    ? `${Math.round((item.value / totalSpent) * 100)}%`
+                    : "0%"}
+                </span>
+              </div>
+            ))}
+            {chartsReady && !spending.length && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Add an expense to see its category share.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="mobile-recent-activity">
+        <CardHeader>
+          <CardTitle>Recent activity</CardTitle>
+          <CardDescription>Within {periodLabel.toLowerCase()}</CardDescription>
+          <CardAction>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/transactions">See all</Link>
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <TransactionList
+            categories={categories}
+            transactions={transactions.slice(0, 4)}
+            onDelete={onDelete}
+            compact
+            hideDelete
+          />
+        </CardContent>
+      </Card>
+
+      <PeriodFilterDrawer
+        open={periodOpen}
+        period={period}
+        customRange={customRange}
+        onOpenChange={onPeriodOpenChange}
+        onPeriodChange={onPeriodChange}
+        onCustomRangeChange={onCustomRangeChange}
+      />
+    </section>
+  )
+}
+
+function PeriodFilterDrawer({
+  open,
+  period,
+  customRange,
+  onOpenChange,
+  onPeriodChange,
+  onCustomRangeChange,
+}: {
+  open: boolean
+  period: PeriodPreset
+  customRange: DateRange
+  onOpenChange: (open: boolean) => void
+  onPeriodChange: (period: PeriodPreset) => void
+  onCustomRangeChange: (range: DateRange) => void
+}) {
+  const customRangeInvalid =
+    !customRange.from || !customRange.to || customRange.from > customRange.to
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent data-testid="period-filter-drawer">
+        <DrawerHeader>
+          <DrawerTitle>Choose a period</DrawerTitle>
+          <DrawerDescription>
+            The summary, category chart, and recent activity update together.
+          </DrawerDescription>
+        </DrawerHeader>
+        <div className="px-4">
+          <ToggleGroup
+            type="single"
+            value={period}
+            variant="outline"
+            className="grid w-full grid-cols-2"
+            onValueChange={(value) => {
+              if (!value) return
+              const nextPeriod = value as PeriodPreset
+              onPeriodChange(nextPeriod)
+              if (nextPeriod !== "custom") onOpenChange(false)
+            }}
+          >
+            {periodOptions.map((option) => (
+              <ToggleGroupItem
+                key={option.value}
+                value={option.value}
+                className="w-full last:col-span-2"
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+
+          {period === "custom" && (
+            <FieldGroup className="mt-4">
+              <Field>
+                <FieldLabel htmlFor="period-from">From</FieldLabel>
+                <Input
+                  id="period-from"
+                  type="date"
+                  value={customRange.from}
+                  max={customRange.to}
+                  onChange={(event) =>
+                    onCustomRangeChange({
+                      ...customRange,
+                      from: event.target.value,
+                    })
+                  }
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="period-to">To</FieldLabel>
+                <Input
+                  id="period-to"
+                  type="date"
+                  value={customRange.to}
+                  min={customRange.from}
+                  onChange={(event) =>
+                    onCustomRangeChange({
+                      ...customRange,
+                      to: event.target.value,
+                    })
+                  }
+                />
+              </Field>
+            </FieldGroup>
+          )}
+        </div>
+        {period === "custom" && (
+          <DrawerFooter>
+            <Button
+              disabled={customRangeInvalid}
+              onClick={() => onOpenChange(false)}
+            >
+              Apply custom period
+            </Button>
+          </DrawerFooter>
+        )}
+      </DrawerContent>
+    </Drawer>
   )
 }
 
@@ -792,13 +1185,13 @@ function CashFlowSkeleton() {
   )
 }
 
-function SpendingSkeleton() {
+function SpendingSkeleton({ compact = false }: { compact?: boolean }) {
   return (
     <Skeleton
       data-testid="spending-skeleton"
       role="status"
       aria-label="Loading spending chart"
-      className="mx-auto size-44 rounded-full"
+      className={cn("mx-auto rounded-full", compact ? "size-36" : "size-44")}
     />
   )
 }
@@ -994,11 +1387,13 @@ function TransactionList({
   transactions,
   onDelete,
   compact,
+  hideDelete,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
   onDelete: (id: string) => Promise<void>
   compact?: boolean
+  hideDelete?: boolean
 }) {
   if (!transactions.length) {
     return (
@@ -1035,7 +1430,8 @@ function TransactionList({
                 {category?.name ?? "Other"}
               </p>
               <p className="truncate text-xs text-muted-foreground">
-                {transaction.note || formatTransactionDate(transaction.date)}
+                {transaction.note ||
+                  (transaction.type === "income" ? "Income" : "Expense")}
               </p>
             </div>
             <div className="shrink-0 text-right">
@@ -1054,10 +1450,12 @@ function TransactionList({
                 {formatTransactionDate(transaction.date)}
               </p>
             </div>
-            <DeleteTransactionButton
-              transaction={transaction}
-              onDelete={onDelete}
-            />
+            {!hideDelete && (
+              <DeleteTransactionButton
+                transaction={transaction}
+                onDelete={onDelete}
+              />
+            )}
           </div>
         )
       })}
