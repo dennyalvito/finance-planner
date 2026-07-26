@@ -1,4 +1,4 @@
-﻿# Coin
+# Coin
 
 Coin is a local-first finance planner for recording income and expenses in one unified ledger. It uses IDR, optional category budgets, custom categories, cash-flow charts, and reports recorded net movement rather than claiming to know an account balance.
 
@@ -13,31 +13,34 @@ Signing in never uploads or deletes guest data. Signing out returns to the prese
 
 ```bash
 pnpm install --frozen-lockfile
-Copy-Item .env.example .env.local
+Copy-Item .env.example .env
 pnpm dev
 ```
 
-Fill these public values in `.env.local` from the Supabase project Connect dialog:
+Fill these public values in `.env` (or `.env.local`) from the Supabase project Connect dialog and Google Cloud:
 
 ```bash
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-Open `http://localhost:3000`. If the variables are absent or placeholders, Coin continues in guest mode.
+Both files are ignored by this repository. Vite loads `.env` for every mode and lets `.env.local` override it locally. Open `http://localhost:3000`. If the Supabase variables are absent or placeholders, Coin continues in guest mode.
 
 ## Supabase and Google OAuth
 
-The database schema and RLS policies are versioned in `supabase/migrations`. The browser receives only the project URL and publishable key; never add a secret or service-role key to a `VITE_` variable.
+The database schema and RLS policies are versioned in `supabase/migrations`. The browser receives only public configuration; never add a secret or service-role key to a `VITE_` variable.
 
 To finish Google sign-in in the Supabase dashboard:
 
 1. Open **Authentication → Providers → Google** and enable Google.
-2. Create OAuth web credentials in Google Cloud. Use the Supabase callback URL shown on the Google provider page as an authorized redirect URI.
-3. Put the Google client ID and client secret in the Supabase provider form. These values stay in Supabase, not in this repository or Vercel's public variables.
+2. Create OAuth web credentials in Google Cloud. Add `http://localhost:3000` as an authorized JavaScript origin and use the Supabase callback URL shown on the Google provider page as an authorized redirect URI.
+3. Put the Google client ID and client secret in the Supabase provider form. The client secret stays in Supabase. The client ID is public and is also used as `VITE_GOOGLE_CLIENT_ID` so Google can render its official button.
 4. Under **Authentication → URL Configuration**, allow `http://localhost:3000/**` for development and the final Vercel domain for production.
 
 Email/password and email OTP signup are intentionally disabled. Google OAuth does not require SMTP setup.
+
+Coin first offers Google's official pre-built button. It sends the returned ID token to Supabase with nonce validation. The browser redirect flow remains available in the dialog as a fallback.
 
 ## Vercel deployment
 
@@ -45,8 +48,11 @@ Add these environment variables to the Vercel project for Production, Preview, a
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_GOOGLE_CLIENT_ID`
 
 After the first production deployment, set the Supabase Site URL to the production Vercel URL and add its redirect pattern, for example `https://your-domain.vercel.app/**`. If a custom domain is added later, allow that domain too.
+
+Also add the production origin, for example `https://your-domain.vercel.app`, to the Google OAuth client's authorized JavaScript origins. Google origins do not include a path or trailing wildcard.
 
 Vercel hosts the application; the Supabase project remains independently owned and can be connected or replaced without binding the database lifecycle to Vercel.
 

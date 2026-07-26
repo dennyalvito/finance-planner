@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test"
+import { expect, test } from "@playwright/test"
 
 test("keeps chart tooltips stable for display labels outside the chart config", async ({
   page,
@@ -183,6 +183,30 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
 test("labels the guest workspace and offers Google account mode", async ({
   page,
 }) => {
+  await page.route("https://accounts.google.com/gsi/client", async (route) => {
+    await route.fulfill({
+      contentType: "application/javascript",
+      body: `
+        window.google = {
+          accounts: {
+            id: {
+              initialize(configuration) {
+                document.body.dataset.googleNonce = configuration.nonce
+              },
+              renderButton(parent) {
+                const button = document.createElement("button")
+                button.type = "button"
+                button.textContent = "Continue with Google"
+                button.setAttribute("aria-label", "Google rendered sign-in")
+                parent.appendChild(button)
+              }
+            }
+          }
+        }
+      `,
+    })
+  })
+
   await page.goto("/settings")
   await page.locator('[data-app-ready="true"]').waitFor()
 
@@ -193,6 +217,22 @@ test("labels the guest workspace and offers Google account mode", async ({
   await expect(
     page.getByRole("button", { name: "Continue with Google" })
   ).toBeEnabled()
+  await page.getByRole("button", { name: "Continue with Google" }).click()
+
+  const signInDialog = page.getByRole("dialog", { name: "Sign in to Coin" })
+  await expect(signInDialog).toBeVisible()
+  await expect(
+    signInDialog.getByRole("button", { name: "Google rendered sign-in" })
+  ).toBeVisible()
+  await expect(
+    signInDialog.getByRole("button", {
+      name: "Use browser redirect instead",
+    })
+  ).toBeVisible()
+  await expect
+    .poll(() => page.locator("body").getAttribute("data-google-nonce"))
+    .toMatch(/^[a-f0-9]{64}$/)
+  await page.getByRole("button", { name: "Close" }).click()
 
   await page.getByRole("button", { name: "Open profile menu" }).click()
   const profileMenu = page.getByRole("menu")

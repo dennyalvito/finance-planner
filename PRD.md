@@ -129,9 +129,9 @@ This is a dual-workspace model, not automatic bidirectional synchronization.
 The first time a user signs in on a browser that contains meaningful guest
 data, Coin should present an explicit choice:
 
-1. **Import guest data to the cloud** â€” copy eligible local records into the
+1. **Import guest data to the cloud** — copy eligible local records into the
    user's cloud workspace after showing a summary and receiving confirmation.
-2. **Keep workspaces separate** â€” open the existing cloud workspace without
+2. **Keep workspaces separate** — open the existing cloud workspace without
    uploading local data.
 
 Recommended behavior:
@@ -265,7 +265,13 @@ Authentication is optional at the product level but required for account mode.
 
 ### Provider decision
 
-Coin uses Google OAuth through Supabase Auth. There is no email/password, magic-link, or email OTP signup in the first release. Guest mode remains the alternative for users who do not want to use Google or create a cloud workspace. SMTP configuration is therefore not required.
+Coin uses Google authentication through Supabase Auth. The primary entry point
+is Google's official pre-built button using an ID-token exchange with nonce
+validation. Supabase's browser redirect OAuth flow remains available as a
+fallback. There is no email/password, magic-link, or email OTP signup in the
+first release. Guest mode remains the alternative for users who do not want to
+use Google or create a cloud workspace. SMTP configuration is therefore not
+required.
 
 ### Session behavior
 
@@ -303,6 +309,7 @@ Expected public client configuration:
 ```bash
 VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
+VITE_GOOGLE_CLIENT_ID=
 ```
 
 The application must detect missing configuration and continue in guest mode
@@ -313,7 +320,7 @@ must not use the `VITE_` prefix.
 
 ## 13. Delivery plan
 
-### Phase 0 â€” Strategy approval
+### Phase 0 — Strategy approval
 
 - Agree on storage-mode behavior.
 - Choose the first auth method.
@@ -346,14 +353,14 @@ must not use the `VITE_` prefix.
 - Add clear storage-mode indicators and loading/error states.
 - Verify that sign-out restores the preserved guest workspace.
 
-### Phase 4 â€” Guest import
+### Phase 4 — Guest import
 
 - Detect meaningful guest data.
 - Add import preview and confirmation.
 - Implement idempotent import and failure recovery.
 - Verify that demo data is excluded and local data is preserved.
 
-### Phase 5 â€” Hardening
+### Phase 5 — Hardening
 
 - Add RLS isolation tests in CI.
 - Add authenticated Playwright workflows.
