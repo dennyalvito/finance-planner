@@ -1,4 +1,4 @@
-﻿import {
+import {
   createContext,
   useCallback,
   useContext,
@@ -17,6 +17,7 @@ type AuthContextValue = {
   user: User | null
   configured: boolean
   signInWithGoogle: () => Promise<void>
+  signInWithGoogleIdToken: (token: string, nonce: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -81,6 +82,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error
   }, [])
 
+  const signInWithGoogleIdToken = useCallback(
+    async (token: string, nonce: string) => {
+      const client = getSupabaseClient()
+      if (!client) {
+        throw new Error("Cloud storage is not configured.")
+      }
+
+      const { error } = await client.auth.signInWithIdToken({
+        provider: "google",
+        token,
+        nonce,
+      })
+
+      if (error) throw error
+    },
+    []
+  )
+
   const signOut = useCallback(async () => {
     const client = getSupabaseClient()
     if (!client) return
@@ -94,9 +113,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...state,
       configured,
       signInWithGoogle,
+      signInWithGoogleIdToken,
       signOut,
     }),
-    [configured, signInWithGoogle, signOut, state]
+    [configured, signInWithGoogle, signInWithGoogleIdToken, signOut, state]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

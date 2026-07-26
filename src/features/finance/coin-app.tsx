@@ -1,4 +1,4 @@
-﻿import {
+import {
   createContext,
   lazy,
   startTransition,
@@ -96,6 +96,7 @@ import {
 } from "@/domain/finance"
 import type { Budget, Category, FinanceTransaction } from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
+import { SignInDialog } from "@/features/auth/sign-in-dialog"
 import { BudgetDialog } from "@/features/finance/budget-dialog"
 import { getCategoryIcon } from "@/features/finance/category-icon"
 import { TransactionDialog } from "@/features/finance/transaction-dialog"
@@ -171,6 +172,7 @@ function getView(pathname: string): CoinView {
 
 type CoinAppContextValue = ReturnType<typeof useFinance> & {
   openBudget: () => void
+  openSignIn: () => void
   openTransaction: () => void
 }
 
@@ -194,17 +196,20 @@ export function CoinApp() {
   const [isInteractive, setIsInteractive] = useState(false)
   const [transactionOpen, setTransactionOpen] = useState(false)
   const [budgetOpen, setBudgetOpen] = useState(false)
+  const [signInOpen, setSignInOpen] = useState(false)
   const finance = useFinance()
   const appReady = isInteractive && !finance.isLoading
   const openTransaction = useCallback(() => setTransactionOpen(true), [])
   const openBudget = useCallback(() => setBudgetOpen(true), [])
+  const openSignIn = useCallback(() => setSignInOpen(true), [])
   const contextValue = useMemo(
     () => ({
       ...finance,
       openBudget,
+      openSignIn,
       openTransaction,
     }),
-    [finance, openBudget, openTransaction]
+    [finance, openBudget, openSignIn, openTransaction]
   )
 
   useEffect(() => {
@@ -221,7 +226,11 @@ export function CoinApp() {
           inert={!appReady}
           className="min-w-0 pb-24 md:pb-0"
         >
-          <AppHeader view={view} onAdd={openTransaction} />
+          <AppHeader
+            view={view}
+            onAdd={openTransaction}
+            onSignIn={openSignIn}
+          />
           <div
             key={view}
             data-testid="route-stage"
@@ -246,6 +255,7 @@ export function CoinApp() {
           categories={finance.categories}
           onSubmit={finance.saveBudget}
         />
+        <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
       </SidebarProvider>
     </CoinAppContext.Provider>
   )
@@ -297,7 +307,12 @@ export function BudgetsPage() {
 export function SettingsPage() {
   const finance = useCoinApp()
 
-  return <SettingsView categories={finance.categories} />
+  return (
+    <SettingsView
+      categories={finance.categories}
+      onSignIn={finance.openSignIn}
+    />
+  )
 }
 
 function accountLabel(email?: string) {
@@ -411,22 +426,20 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
     </Sidebar>
   )
 }
-function AppHeader({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
+function AppHeader({
+  view,
+  onAdd,
+  onSignIn,
+}: {
+  view: CoinView
+  onAdd: () => void
+  onSignIn: () => void
+}) {
   const auth = useAuth()
   const title =
     navigation.find((item) => item.view === view)?.label ?? "Overview"
   const cloudWorkspace = auth.status === "authenticated"
   const profile = cloudWorkspace ? accountLabel(auth.user?.email) : "Guest mode"
-
-  const signIn = async () => {
-    try {
-      await auth.signInWithGoogle()
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Google sign-in failed."
-      )
-    }
-  }
 
   const signOut = async () => {
     try {
@@ -506,7 +519,7 @@ function AppHeader({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
               ) : (
                 <DropdownMenuItem
                   disabled={!auth.configured || auth.status === "loading"}
-                  onSelect={() => void signIn()}
+                  onSelect={onSignIn}
                 >
                   <LogInIcon />
                   Continue with Google
@@ -726,7 +739,7 @@ function OverviewView({
               <CardTitle>Budget pulse</CardTitle>
               <CardDescription>
                 {budget.configured
-                  ? "This monthâ€™s selected limits."
+                  ? "This month's selected limits."
                   : "No limits set this month."}
               </CardDescription>
             </CardHeader>
@@ -1034,7 +1047,7 @@ function TransactionList({
                     : "text-foreground"
                 )}
               >
-                {transaction.type === "income" ? "+" : "âˆ’"}
+                {transaction.type === "income" ? "+" : "-"}
                 {formatCompactRupiah(transaction.amount)}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -1234,7 +1247,13 @@ function SummaryValue({ label, value }: { label: string; value: number }) {
   )
 }
 
-function SettingsView({ categories }: { categories: Category[] }) {
+function SettingsView({
+  categories,
+  onSignIn,
+}: {
+  categories: Category[]
+  onSignIn: () => void
+}) {
   const auth = useAuth()
   const cloudWorkspace = auth.status === "authenticated"
   const expenseCategories = categories.filter(
@@ -1243,16 +1262,6 @@ function SettingsView({ categories }: { categories: Category[] }) {
   const incomeCategories = categories.filter(
     (category) => category.type === "income"
   )
-
-  const signIn = async () => {
-    try {
-      await auth.signInWithGoogle()
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Google sign-in failed."
-      )
-    }
-  }
 
   const signOut = async () => {
     try {
@@ -1336,7 +1345,7 @@ function SettingsView({ categories }: { categories: Category[] }) {
                 <Button
                   variant="outline"
                   disabled={!auth.configured || auth.status === "loading"}
-                  onClick={() => void signIn()}
+                  onClick={onSignIn}
                 >
                   <LogInIcon data-icon="inline-start" />
                   Continue with Google
