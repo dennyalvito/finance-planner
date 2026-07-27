@@ -56,6 +56,24 @@ test("collapses the desktop sidebar to icons and keeps the chart card content-si
   await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()
 
+  const scrollbarStyles = await page.evaluate(() => {
+    const rootStyles = window.getComputedStyle(document.documentElement)
+    const thumbStyles = window.getComputedStyle(
+      document.documentElement,
+      "::-webkit-scrollbar-thumb"
+    )
+
+    return {
+      color: rootStyles.scrollbarColor,
+      width: rootStyles.scrollbarWidth,
+      thumbColor: thumbStyles.backgroundColor,
+    }
+  })
+
+  expect(scrollbarStyles.width).toBe("thin")
+  expect(scrollbarStyles.color).not.toBe("auto")
+  expect(scrollbarStyles.thumbColor).not.toBe("rgba(0, 0, 0, 0)")
+
   const chartCard = page.getByTestId("cash-flow-card")
   const chart = page.getByTestId("cash-flow-chart")
   const cardBox = await chartCard.boundingBox()
@@ -166,20 +184,15 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
     .click()
   await expect(page.getByTestId("period-filter-drawer")).toBeVisible()
   await page.getByRole("radio", { name: "Custom" }).click()
-  await page.getByLabel("From").fill("2026-07-10")
-  await page.getByLabel("To").fill("2026-07-20")
+  await page.locator('[data-date="2026-07-10"]').click()
+  await page.locator('[data-date="2026-07-20"]').click()
   await page.getByRole("button", { name: "Apply custom period" }).click()
-  await expect(
-    page.getByRole("button", {
-      name: "Change period, currently 10 Jul – 20 Jul",
-    })
-  ).toBeVisible()
+  const customPeriodButton = page.getByRole("button", {
+    name: /Change period, currently 10 Jul.*20 Jul/,
+  })
+  await expect(customPeriodButton).toBeVisible()
 
-  await page
-    .getByRole("button", {
-      name: "Change period, currently 10 Jul – 20 Jul",
-    })
-    .click()
+  await customPeriodButton.click()
   await page.getByRole("radio", { name: "Today" }).click()
   await expect(
     page.getByRole("button", { name: "Change period, currently Today" })
@@ -190,6 +203,7 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await expect(
     page.getByRole("heading", { name: "Add transaction" })
   ).toBeVisible()
+  await expect(page.getByLabel("Amount")).toBeFocused()
   const drawerBackdrop = await page
     .locator('[data-slot="drawer-overlay"]')
     .evaluate((element) => window.getComputedStyle(element).backdropFilter)
@@ -220,9 +234,10 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   })
   expect(selectedTypeColors).not.toEqual(unselectedTypeColors)
 
-  await page.getByLabel("Amount").fill("125000")
+  const amountInput = page.getByLabel("Amount")
+  await amountInput.fill("125000")
+  await expect(amountInput).toHaveValue("125.000")
   const foodCategory = page.getByRole("radio", { name: "Food & dining" })
-  await foodCategory.click()
   await expect(foodCategory).toHaveAttribute("data-state", "on")
   await page.getByRole("button", { name: "Save transaction" }).click()
   await expect(page.getByText("Transaction added")).toBeVisible()
@@ -244,9 +259,12 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await expect(
     page.getByRole("heading", { name: "Set a monthly budget" })
   ).toBeVisible()
-  await page.getByLabel("Expense category").click()
-  await page.getByRole("option", { name: "Food & dining" }).click()
+  await expect(page.getByLabel("Monthly limit in IDR")).toBeFocused()
+  await expect(page.getByLabel("Expense category")).toContainText(
+    "Food & dining"
+  )
   await page.getByLabel("Monthly limit in IDR").fill("2000000")
+  await expect(page.getByLabel("Monthly limit in IDR")).toHaveValue("2.000.000")
   await page.getByRole("button", { name: "Save budget" }).click()
   await expect(page.getByText("Budget saved")).toBeVisible()
 
@@ -276,6 +294,14 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
 test("labels the guest workspace and offers Google account mode", async ({
   page,
 }) => {
+  await page.route("**/auth/v1/token?grant_type=id_token", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Test sign-in stopped" }),
+    })
+  })
   await page.route("https://accounts.google.com/gsi/client", async (route) => {
     await route.fulfill({
       contentType: "application/javascript",
@@ -284,6 +310,7 @@ test("labels the guest workspace and offers Google account mode", async ({
           accounts: {
             id: {
               initialize(configuration) {
+                window.googleConfiguration = configuration
                 document.body.dataset.googleNonce = configuration.nonce
               },
               renderButton(parent) {
@@ -291,6 +318,11 @@ test("labels the guest workspace and offers Google account mode", async ({
                 button.type = "button"
                 button.textContent = "Continue with Google"
                 button.setAttribute("aria-label", "Google rendered sign-in")
+                button.addEventListener("click", () => {
+                  window.googleConfiguration.callback({
+                    credential: "test-google-credential"
+                  })
+                })
                 parent.appendChild(button)
               }
             }
@@ -303,10 +335,19 @@ test("labels the guest workspace and offers Google account mode", async ({
   await page.goto("/settings")
   await page.locator('[data-app-ready="true"]').waitFor()
 
-  await expect(page.getByText("This browser", { exact: true })).toBeVisible()
   await expect(
-    page.getByText("Guest data stays in IndexedDB", { exact: false })
+    page.getByRole("heading", { name: "Profile", exact: true })
   ).toBeVisible()
+  await expect(page.getByText("Saved on this device")).toBeVisible()
+  await expect(page.getByText("Indonesian rupiah")).toBeVisible()
+  await page.getByRole("button", { name: /Categories/ }).click()
+  const categoryDialog = page.getByRole("dialog", { name: "Categories" })
+  await expect(categoryDialog).toBeVisible()
+  await expect(categoryDialog.getByText("Personal categories")).toBeVisible()
+  await expect(
+    categoryDialog.getByRole("button", { name: "Sign in to customize" })
+  ).toBeVisible()
+  await categoryDialog.getByRole("button", { name: "Close" }).click()
   await expect(
     page.getByRole("button", { name: "Continue with Google" })
   ).toBeEnabled()
@@ -321,10 +362,22 @@ test("labels the guest workspace and offers Google account mode", async ({
     signInDialog.getByRole("button", {
       name: "Use browser redirect instead",
     })
-  ).toBeVisible()
+  ).toHaveCount(0)
   await expect
     .poll(() => page.locator("body").getAttribute("data-google-nonce"))
     .toMatch(/^[a-f0-9]{64}$/)
+  await signInDialog
+    .getByRole("button", { name: "Google rendered sign-in" })
+    .click()
+  await expect(
+    signInDialog.getByRole("button", { name: "Signing in…" })
+  ).toBeVisible()
+  await expect(
+    signInDialog.getByRole("button", { name: "Google rendered sign-in" })
+  ).toBeHidden()
+  await expect(signInDialog.getByRole("alert")).toContainText(
+    "Test sign-in stopped"
+  )
   await page.getByRole("button", { name: "Close" }).click()
 
   await page.getByRole("button", { name: "Open profile menu" }).click()

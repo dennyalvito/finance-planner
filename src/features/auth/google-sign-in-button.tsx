@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { useAuth } from "@/features/auth/auth-provider"
 import {
   generateGoogleNonce,
@@ -97,8 +99,7 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
   if (!clientId) {
     return (
       <p role="status" className="text-sm text-muted-foreground">
-        The Google button is not configured for this environment. Use the
-        redirect option below.
+        Google sign-in is not configured for this environment.
       </p>
     )
   }
@@ -116,15 +117,19 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
           ref={containerRef}
           data-testid="google-sign-in-button"
           className={
-            status === "loading"
+            status === "loading" || status === "submitting"
               ? "invisible flex min-h-10 w-full justify-center"
               : "flex min-h-10 w-full justify-center"
           }
         />
         {status === "submitting" && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/80 text-sm text-muted-foreground">
+          <Button
+            className="absolute inset-x-0 mx-auto w-full max-w-80"
+            disabled
+          >
+            <Spinner data-icon="inline-start" />
             Signing in…
-          </div>
+          </Button>
         )}
       </div>
       {errorMessage && (

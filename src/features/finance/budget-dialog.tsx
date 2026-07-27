@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { FormEvent } from "react"
 import { GaugeIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -39,6 +39,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { Category } from "@/domain/finance"
+import {
+  formatIdrAmountInput,
+  parseIdrAmount,
+  sanitizeIdrAmount,
+} from "@/features/finance/idr-amount"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const formId = "coin-budget-form"
@@ -47,6 +52,7 @@ type BudgetDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   categories: Category[]
+  initialCategoryId?: string
   onSubmit: (categoryId: string, amount: number) => Promise<void>
 }
 
@@ -54,6 +60,7 @@ export function BudgetDialog({
   open,
   onOpenChange,
   categories,
+  initialCategoryId,
   onSubmit,
 }: BudgetDialogProps) {
   const isMobile = useIsMobile()
@@ -61,9 +68,24 @@ export function BudgetDialog({
   const [amount, setAmount] = useState("")
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
-  const numericAmount = Number(amount.replace(/\D/g, ""))
+  const numericAmount = parseIdrAmount(amount)
   const amountInvalid = submitted && numericAmount < 1
   const categoryInvalid = submitted && !categoryId
+
+  useEffect(() => {
+    if (!open) return
+    const expenseCategories = categories.filter(
+      (category) => category.type === "expense"
+    )
+    const preferredCategory =
+      expenseCategories.find((category) => category.id === initialCategoryId) ??
+      expenseCategories.find((category) => category.id === "food") ??
+      expenseCategories.at(0)
+
+    setCategoryId(preferredCategory?.id ?? "")
+    setAmount("")
+    setSubmitted(false)
+  }, [categories, initialCategoryId, open])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -129,12 +151,13 @@ export function BudgetDialog({
           <Input
             id="budget-amount"
             inputMode="numeric"
-            value={amount}
+            value={formatIdrAmountInput(amount)}
             onChange={(event) =>
-              setAmount(event.target.value.replace(/\D/g, ""))
+              setAmount(sanitizeIdrAmount(event.target.value))
             }
-            placeholder="1500000"
+            placeholder="1.500.000"
             aria-invalid={amountInvalid}
+            autoFocus
           />
           <FieldDescription>
             Saving again replaces the limit for this category.

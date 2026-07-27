@@ -51,6 +51,10 @@ export type CategorySpending = {
   value: number
 }
 
+export type CategoryCashFlow = CategorySpending & {
+  type: TransactionType
+}
+
 export function formatRupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -145,6 +149,35 @@ export function buildCategorySpending(
         categories.find((category) => category.id === categoryId)?.name ??
         "Other",
       value,
+    }))
+    .sort((left, right) => right.value - left.value)
+}
+
+export function buildCategoryCashFlow(
+  transactions: FinanceTransaction[],
+  categories: Category[]
+): CategoryCashFlow[] {
+  const totals = new Map<
+    string,
+    { categoryId: string; type: TransactionType; value: number }
+  >()
+
+  for (const transaction of transactions) {
+    const key = `${transaction.type}:${transaction.categoryId}`
+    const current = totals.get(key)
+    totals.set(key, {
+      categoryId: transaction.categoryId,
+      type: transaction.type,
+      value: (current?.value ?? 0) + transaction.amount,
+    })
+  }
+
+  return [...totals.values()]
+    .map((item) => ({
+      ...item,
+      name:
+        categories.find((category) => category.id === item.categoryId)?.name ??
+        "Other",
     }))
     .sort((left, right) => right.value - left.value)
 }
