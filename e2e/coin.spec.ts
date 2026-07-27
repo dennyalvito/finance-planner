@@ -6,7 +6,13 @@ test("keeps chart tooltips stable for display labels outside the chart config", 
   const pageErrors: Error[] = []
   page.on("pageerror", (error) => pageErrors.push(error))
 
-  await page.goto("/")
+  const response = await page.goto("/")
+  expect(response?.headers()["cross-origin-opener-policy"]).toBe(
+    "same-origin-allow-popups"
+  )
+  expect(response?.headers()["referrer-policy"]).toBe(
+    "strict-origin-when-cross-origin"
+  )
   await page.locator('[data-app-ready="true"]').waitFor()
 
   const desktopOverview = page.getByTestId("desktop-overview")
@@ -312,6 +318,9 @@ test("labels the guest workspace and offers Google account mode", async ({
               initialize(configuration) {
                 window.googleConfiguration = configuration
                 document.body.dataset.googleNonce = configuration.nonce
+                document.body.dataset.googleFedcmButton = String(
+                  configuration.use_fedcm_for_button
+                )
                 document.body.dataset.googleInitializeCount = String(
                   Number(document.body.dataset.googleInitializeCount || "0") + 1
                 )
@@ -369,6 +378,10 @@ test("labels the guest workspace and offers Google account mode", async ({
   await expect
     .poll(() => page.locator("body").getAttribute("data-google-nonce"))
     .toMatch(/^[a-f0-9]{64}$/)
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-google-fedcm-button",
+    "true"
+  )
   await signInDialog
     .getByRole("button", { name: "Google rendered sign-in" })
     .click()

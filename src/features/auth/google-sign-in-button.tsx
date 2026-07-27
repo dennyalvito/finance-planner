@@ -8,6 +8,7 @@ import {
   getGoogleClientId,
   getGoogleIdentityController,
 } from "@/features/auth/google-identity"
+import { cn } from "@/lib/utils"
 
 type GoogleButtonStatus = "loading" | "ready" | "submitting" | "error"
 
@@ -24,6 +25,8 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
 
     let active = true
     let releaseCredentialHandler: (() => void) | undefined
+    let releaseButtonLoadHandler: (() => void) | undefined
+    let readyFallback: number | undefined
 
     const initialize = async () => {
       try {
@@ -66,14 +69,36 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
         container.replaceChildren()
         controller.identity.renderButton(container, {
           type: "standard",
-          theme: "outline",
+          theme: "outline_dark",
           size: "large",
           text: "continue_with",
           shape: "rectangular",
           logo_alignment: "left",
-          width: Math.min(container.clientWidth || 320, 320),
+          width: Math.min(container.clientWidth || 320, 400),
         })
-        setStatus("ready")
+
+        const markReady = () => {
+          if (readyFallback !== undefined) {
+            window.clearTimeout(readyFallback)
+            readyFallback = undefined
+          }
+          if (active) setStatus("ready")
+        }
+        const iframe = container.querySelector("iframe")
+
+        if (iframe) {
+          iframe.style.display = "block"
+          iframe.style.width = "100%"
+          iframe.style.height = "40px"
+          iframe.style.backgroundColor = "transparent"
+          iframe.style.colorScheme = "dark"
+          iframe.addEventListener("load", markReady, { once: true })
+          releaseButtonLoadHandler = () =>
+            iframe.removeEventListener("load", markReady)
+          readyFallback = window.setTimeout(markReady, 1_500)
+        } else {
+          markReady()
+        }
       } catch (error) {
         if (!active) return
         setStatus("error")
@@ -90,6 +115,8 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
     return () => {
       active = false
       releaseCredentialHandler?.()
+      releaseButtonLoadHandler?.()
+      if (readyFallback !== undefined) window.clearTimeout(readyFallback)
       container.replaceChildren()
     }
   }, [clientId, onSuccess, signInWithGoogleIdToken])
@@ -105,26 +132,24 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="flex flex-col gap-2">
       <div
-        className="relative flex min-h-10 w-full justify-center"
+        className="relative mx-auto flex h-10 w-full max-w-[400px] justify-center overflow-hidden bg-muted"
         aria-busy={status === "loading" || status === "submitting"}
       >
         {status === "loading" && (
-          <Skeleton className="absolute inset-x-auto h-10 w-full max-w-80" />
+          <Skeleton className="absolute inset-0 h-10 w-full" />
         )}
         <div
           ref={containerRef}
           data-testid="google-sign-in-button"
-          className={
+          className={cn(
+            "flex h-10 w-full justify-center transition-opacity duration-150",
             status === "loading" || status === "submitting"
-              ? "invisible flex min-h-10 w-full justify-center"
-              : "flex min-h-10 w-full justify-center"
-          }
+              ? "pointer-events-none opacity-0"
+              : "opacity-100"
+          )}
         />
         {status === "submitting" && (
-          <Button
-            className="absolute inset-x-0 mx-auto w-full max-w-80"
-            disabled
-          >
+          <Button className="absolute inset-0 w-full" disabled>
             <Spinner data-icon="inline-start" />
             Signing in…
           </Button>

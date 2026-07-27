@@ -34,13 +34,13 @@ The database schema and RLS policies are versioned in `supabase/migrations`. The
 To finish Google sign-in in the Supabase dashboard:
 
 1. Open **Authentication → Providers → Google** and enable Google.
-2. Create OAuth web credentials in Google Cloud. Add `http://localhost:3000` as an authorized JavaScript origin and use the Supabase callback URL shown on the Google provider page as an authorized redirect URI.
+2. Create OAuth web credentials in Google Cloud. Under **Authorized JavaScript origins**, add exactly `http://localhost:3000` for local development. If you intentionally open the app through `http://127.0.0.1:3000`, add that separately because Google treats it as a different origin. Use the Supabase callback URL shown on the Google provider page as an authorized redirect URI.
 3. Put the Google client ID and client secret in the Supabase provider form. The client secret stays in Supabase. The client ID is public and is also used as `VITE_GOOGLE_CLIENT_ID` so Google can render its official button.
 4. Under **Authentication → URL Configuration**, allow `http://localhost:3000/**` for development and the final Vercel domain for production.
 
 Email/password and email OTP signup are intentionally disabled. Google OAuth does not require SMTP setup.
 
-Coin first offers Google's official pre-built button. It sends the returned ID token to Supabase with nonce validation. The browser redirect flow remains available in the dialog as a fallback.
+Coin uses Google's official pre-built button and sends the returned ID token to Supabase with nonce validation.
 
 ## Vercel deployment
 
