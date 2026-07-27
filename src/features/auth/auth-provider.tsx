@@ -48,14 +48,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let active = true
+    let observedAuthEvent = false
     const {
       data: { subscription },
     } = client.auth.onAuthStateChange((_event, session) => {
-      if (active) setState(authState(session))
+      observedAuthEvent = true
+      if (active) {
+        setState(authState(session))
+      }
     })
 
     void client.auth.getSession().then(({ data, error }) => {
-      if (!active) return
+      if (!active || observedAuthEvent) return
       setState(error ? authState(null) : authState(data.session))
     })
 
@@ -72,13 +76,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Cloud storage is not configured.")
       }
 
-      const { error } = await client.auth.signInWithIdToken({
+      const { data, error } = await client.auth.signInWithIdToken({
         provider: "google",
         token,
         nonce,
       })
 
       if (error) throw error
+      setState(authState(data.session))
     },
     []
   )

@@ -5,10 +5,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { useAuth } from "@/features/auth/auth-provider"
 import {
-  generateGoogleNonce,
   getGoogleClientId,
-  hashGoogleNonce,
-  loadGoogleIdentity,
+  getGoogleIdentityController,
 } from "@/features/auth/google-identity"
 
 type GoogleButtonStatus = "loading" | "ready" | "submitting" | "error"
@@ -25,22 +23,22 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
     if (!clientId || !container) return
 
     let active = true
+    let releaseCredentialHandler: (() => void) | undefined
 
     const initialize = async () => {
       try {
         setStatus("loading")
         setErrorMessage(undefined)
 
-        const identity = await loadGoogleIdentity()
-        const nonce = generateGoogleNonce()
-        const hashedNonce = await hashGoogleNonce(nonce)
+        const controller = await getGoogleIdentityController(clientId)
 
         if (!active) return
 
-        identity.initialize({
-          client_id: clientId,
-          callback: (response) => {
-            if (!active) return
+        releaseCredentialHandler = controller.setCredentialHandler(
+          (response) => {
+            if (!active) {
+              return
+            }
 
             if (!response.credential) {
               setStatus("error")
@@ -49,7 +47,7 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
             }
 
             setStatus("submitting")
-            void signInWithGoogleIdToken(response.credential, nonce)
+            void signInWithGoogleIdToken(response.credential, controller.nonce)
               .then(() => {
                 if (active) onSuccess()
               })
@@ -62,13 +60,11 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
                     : "Google sign-in failed."
                 )
               })
-          },
-          nonce: hashedNonce,
-          use_fedcm_for_prompt: true,
-        })
+          }
+        )
 
         container.replaceChildren()
-        identity.renderButton(container, {
+        controller.identity.renderButton(container, {
           type: "standard",
           theme: "outline",
           size: "large",
@@ -93,6 +89,8 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
 
     return () => {
       active = false
+      releaseCredentialHandler?.()
+      container.replaceChildren()
     }
   }, [clientId, onSuccess, signInWithGoogleIdToken])
 

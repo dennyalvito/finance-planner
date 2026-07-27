@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react"
+﻿import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 
 import type {
@@ -29,6 +29,23 @@ function messageFrom(error: unknown) {
     : "The finance data request failed."
 }
 
+async function loadCloudSnapshot(repository: FinanceRepository) {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await repository.load()
+    } catch (error) {
+      lastError = error
+      if (attempt === 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, 150))
+      }
+    }
+  }
+
+  throw lastError
+}
+
 export function selectFinanceRepository(
   status: "loading" | "guest" | "authenticated",
   localRepository: FinanceRepository,
@@ -45,6 +62,7 @@ export function useFinance() {
     useState<FinanceSnapshot>(emptySnapshot)
   const [cloudLoading, setCloudLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const cloudLoadId = useRef(0)
 
   useEffect(() => {
     void ensureFinanceSeed()
@@ -69,27 +87,41 @@ export function useFinance() {
   const reloadCloud = useCallback(async () => {
     if (!cloudRepository) return
 
+    const requestId = ++cloudLoadId.current
     setCloudLoading(true)
     setError(null)
     try {
-      setCloudSnapshot(await cloudRepository.load())
+      const snapshot = await loadCloudSnapshot(cloudRepository)
+      if (requestId === cloudLoadId.current) {
+        setCloudSnapshot(snapshot)
+      }
     } catch (loadError) {
-      setError(messageFrom(loadError))
+      if (requestId === cloudLoadId.current) {
+        setError(messageFrom(loadError))
+      }
       throw loadError
     } finally {
-      setCloudLoading(false)
+      if (requestId === cloudLoadId.current) {
+        setCloudLoading(false)
+      }
     }
   }, [cloudRepository])
 
   useEffect(() => {
     if (!cloudRepository) {
+      cloudLoadId.current += 1
       setCloudSnapshot(emptySnapshot)
       setCloudLoading(false)
       setError(null)
       return
     }
 
+    setCloudSnapshot(emptySnapshot)
     void reloadCloud().catch(() => undefined)
+
+    return () => {
+      cloudLoadId.current += 1
+    }
   }, [cloudRepository, reloadCloud])
 
   const runMutation = useCallback(
