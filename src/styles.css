@@ -75,6 +75,12 @@
   --border: oklch(0.865 0.024 80);
   --input: oklch(0.86 0.024 80);
   --ring: oklch(0.64 0.095 80);
+  --scrollbar-thumb: color-mix(
+    in oklch,
+    var(--muted-foreground) 58%,
+    transparent
+  );
+  --scrollbar-thumb-hover: var(--muted-foreground);
   --chart-1: oklch(0.71 0.13 79);
   --chart-2: oklch(0.46 0.09 151);
   --chart-3: oklch(0.63 0.14 44);
@@ -132,6 +138,8 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+    scrollbar-width: thin;
   }
 
   html {
@@ -150,6 +158,28 @@
   ::selection {
     background: var(--accent);
     color: var(--accent-foreground);
+  }
+
+  *::-webkit-scrollbar {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    min-height: 2.5rem;
+    border: 0.125rem solid transparent;
+    border-radius: 999px;
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
   }
 }
 
@@ -181,6 +211,51 @@
   }
 
   .coin-route-enter {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  * {
+    scrollbar-color: auto;
+  }
+}
+@keyframes coin-collapsible-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes coin-collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+.coin-collapsible-content {
+  overflow: hidden;
+}
+
+.coin-collapsible-content[data-state="open"] {
+  animation: coin-collapsible-down 180ms ease-out;
+}
+
+.coin-collapsible-content[data-state="closed"] {
+  animation: coin-collapsible-up 150ms ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coin-collapsible-content[data-state] {
     animation: none;
   }
 }

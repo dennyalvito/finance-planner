@@ -44,14 +44,35 @@ import type {
   NewTransaction,
   TransactionType,
 } from "@/domain/finance"
+import { useAuth } from "@/features/auth/auth-provider"
 import { getCategoryIcon } from "@/features/finance/category-icon"
+import {
+  formatIdrAmountInput,
+  parseIdrAmount,
+  sanitizeIdrAmount,
+} from "@/features/finance/idr-amount"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const createCategoryValue = "__create_category__"
 const formId = "coin-transaction-form"
 
 function today() {
-  return new Date().toISOString().slice(0, 10)
+  const now = new Date()
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-")
+}
+
+function preferredCategoryId(categories: Category[], type: TransactionType) {
+  const preferredId = type === "expense" ? "food" : "salary"
+  const matching = categories.filter((category) => category.type === type)
+  return (
+    matching.find((category) => category.id === preferredId)?.id ??
+    matching.at(0)?.id ??
+    ""
+  )
 }
 
 type TransactionDialogProps = {
@@ -70,6 +91,8 @@ export function TransactionDialog({
   onSubmit,
 }: TransactionDialogProps) {
   const isMobile = useIsMobile()
+  const auth = useAuth()
+  const canCreateCategory = auth.status === "authenticated"
   const [type, setType] = useState<TransactionType>("expense")
   const [amount, setAmount] = useState("")
   const [categoryId, setCategoryId] = useState("")
@@ -83,7 +106,7 @@ export function TransactionDialog({
   const availableCategories = categories.filter(
     (category) => category.type === type
   )
-  const numericAmount = Number(amount.replace(/\D/g, ""))
+  const numericAmount = parseIdrAmount(amount)
   const amountInvalid = submitted && (!numericAmount || numericAmount < 1)
   const categoryInvalid = submitted && !categoryId
   const customCategoryInvalid =
@@ -92,14 +115,21 @@ export function TransactionDialog({
     customCategory.trim().length < 2
 
   useEffect(() => {
-    setCategoryId("")
+    if (!open) return
+    setType("expense")
+    setAmount("")
+    setCategoryId(preferredCategoryId(categories, "expense"))
     setCustomCategory("")
-  }, [type])
+    setDate(today())
+    setNote("")
+    setShowDetails(false)
+    setSubmitted(false)
+  }, [categories, open])
 
   function reset() {
     setType("expense")
     setAmount("")
-    setCategoryId("")
+    setCategoryId(preferredCategoryId(categories, "expense"))
     setCustomCategory("")
     setDate(today())
     setNote("")
@@ -123,6 +153,10 @@ export function TransactionDialog({
 
     setSaving(true)
     try {
+      if (categoryId === createCategoryValue && !canCreateCategory) {
+        throw new Error("Sign in to create a personal category.")
+      }
+
       const resolvedCategoryId =
         categoryId === createCategoryValue
           ? (await onCreateCategory(customCategory, type)).id
@@ -164,7 +198,11 @@ export function TransactionDialog({
               type="single"
               value={type}
               onValueChange={(value) => {
-                if (value) setType(value as TransactionType)
+                if (!value) return
+                const nextType = value as TransactionType
+                setType(nextType)
+                setCategoryId(preferredCategoryId(categories, nextType))
+                setCustomCategory("")
               }}
               variant="selection"
               spacing={2}
@@ -190,11 +228,12 @@ export function TransactionDialog({
               inputMode="numeric"
               autoComplete="off"
               placeholder="Rp 0"
-              value={amount}
+              value={formatIdrAmountInput(amount)}
               onChange={(event) =>
-                setAmount(event.target.value.replace(/\D/g, ""))
+                setAmount(sanitizeIdrAmount(event.target.value))
               }
               aria-invalid={amountInvalid}
+              autoFocus
             />
             {amountInvalid && (
               <FieldError>Enter an amount above zero.</FieldError>
@@ -235,7 +274,11 @@ export function TransactionDialog({
             onClick={() => setShowDetails((current) => !current)}
           >
             <PlusIcon data-icon="inline-start" />
-            {showDetails ? "Hide details" : "More or custom category"}
+            {showDetails
+              ? "Hide details"
+              : canCreateCategory
+                ? "More or custom category"
+                : "More details"}
           </Button>
 
           {showDetails && (
@@ -259,12 +302,14 @@ export function TransactionDialog({
                         </SelectItem>
                       ))}
                     </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Personalize</SelectLabel>
-                      <SelectItem value={createCategoryValue}>
-                        Create a custom category
-                      </SelectItem>
-                    </SelectGroup>
+                    {canCreateCategory && (
+                      <SelectGroup>
+                        <SelectLabel>Personalize</SelectLabel>
+                        <SelectItem value={createCategoryValue}>
+                          Create a custom category
+                        </SelectItem>
+                      </SelectGroup>
+                    )}
                   </SelectContent>
                 </Select>
               </Field>
@@ -321,7 +366,11 @@ export function TransactionDialog({
               type="single"
               value={type}
               onValueChange={(value) => {
-                if (value) setType(value as TransactionType)
+                if (!value) return
+                const nextType = value as TransactionType
+                setType(nextType)
+                setCategoryId(preferredCategoryId(categories, nextType))
+                setCustomCategory("")
               }}
               variant="selection"
               spacing={2}
@@ -345,12 +394,13 @@ export function TransactionDialog({
               name="amount"
               inputMode="numeric"
               autoComplete="off"
-              placeholder="125000"
-              value={amount}
+              placeholder="1.250.000"
+              value={formatIdrAmountInput(amount)}
               onChange={(event) =>
-                setAmount(event.target.value.replace(/\D/g, ""))
+                setAmount(sanitizeIdrAmount(event.target.value))
               }
               aria-invalid={amountInvalid}
+              autoFocus
             />
             <FieldDescription>
               Enter whole rupiah without decimal values.
@@ -381,12 +431,14 @@ export function TransactionDialog({
                     </SelectItem>
                   ))}
                 </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel>Personalize</SelectLabel>
-                  <SelectItem value={createCategoryValue}>
-                    Create a custom category
-                  </SelectItem>
-                </SelectGroup>
+                {canCreateCategory && (
+                  <SelectGroup>
+                    <SelectLabel>Personalize</SelectLabel>
+                    <SelectItem value={createCategoryValue}>
+                      Create a custom category
+                    </SelectItem>
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
             {categoryInvalid && <FieldError>Choose a category.</FieldError>}

@@ -8,6 +8,7 @@ import {
 import type { ChartConfig } from "@/components/ui/chart"
 import { formatCompactRupiah } from "@/domain/finance"
 import type { CategorySpending } from "@/domain/finance"
+import { cn } from "@/lib/utils"
 
 const chartConfig = {
   value: {
@@ -31,9 +32,17 @@ const fills = [
 export function SpendingChart({
   data,
   compact = false,
+  centerLabel = "Spent",
+  centerValue,
+  centerTone = "default",
+  emptyLabel = "No expense data yet",
 }: {
   data: CategorySpending[]
   compact?: boolean
+  centerLabel?: string
+  centerValue?: number
+  centerTone?: "default" | "positive" | "negative"
+  emptyLabel?: string
 }) {
   const total = data.reduce((sum, item) => sum + item.value, 0)
   const chartData = data.slice(0, 5).map((item, index) => ({
@@ -50,7 +59,7 @@ export function SpendingChart({
             : "flex h-44 items-center justify-center text-sm text-muted-foreground"
         }
       >
-        No expense data yet
+        {emptyLabel}
       </div>
     )
   }
@@ -85,15 +94,17 @@ export function SpendingChart({
         </PieChart>
       </ChartContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-xs text-muted-foreground">Spent</span>
+        <span className="text-xs text-muted-foreground">{centerLabel}</span>
         <span
-          className={
+          className={cn(
             compact
               ? "text-xs font-semibold tabular-nums"
-              : "text-sm font-semibold tabular-nums"
-          }
+              : "text-sm font-semibold tabular-nums",
+            centerTone === "positive" && "text-positive",
+            centerTone === "negative" && "text-negative"
+          )}
         >
-          {formatCompactRupiah(total)}
+          {formatCompactRupiah(centerValue ?? total)}
         </span>
       </div>
     </div>

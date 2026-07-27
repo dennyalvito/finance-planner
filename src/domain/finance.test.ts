@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildCashFlowSeries,
+  buildCategoryCashFlow,
   buildCategorySpending,
   calculateBudgetProgress,
   summarizeLedger,
@@ -82,6 +83,40 @@ describe("finance domain", () => {
     expect(spending.map((item) => item.categoryId)).toEqual([
       "food",
       "transport",
+    ])
+  })
+
+  it("groups income and expenses for the cash-flow category chart", () => {
+    const categories: Category[] = [
+      { id: "food", name: "Food", type: "expense", isCustom: false },
+      { id: "salary", name: "Salary", type: "income", isCustom: false },
+    ]
+
+    const cashFlow = buildCategoryCashFlow(
+      [
+        transaction({
+          type: "income",
+          categoryId: "salary",
+          amount: 5_000_000,
+        }),
+        transaction({ id: "transaction-2", amount: 750_000 }),
+      ],
+      categories
+    )
+
+    expect(cashFlow).toEqual([
+      {
+        categoryId: "salary",
+        name: "Salary",
+        type: "income",
+        value: 5_000_000,
+      },
+      {
+        categoryId: "food",
+        name: "Food",
+        type: "expense",
+        value: 750_000,
+      },
     ])
   })
 
