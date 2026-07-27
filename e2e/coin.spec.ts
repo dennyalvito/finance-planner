@@ -312,6 +312,9 @@ test("labels the guest workspace and offers Google account mode", async ({
               initialize(configuration) {
                 window.googleConfiguration = configuration
                 document.body.dataset.googleNonce = configuration.nonce
+                document.body.dataset.googleInitializeCount = String(
+                  Number(document.body.dataset.googleInitializeCount || "0") + 1
+                )
               },
               renderButton(parent) {
                 const button = document.createElement("button")
@@ -377,6 +380,22 @@ test("labels the guest workspace and offers Google account mode", async ({
   ).toBeHidden()
   await expect(signInDialog.getByRole("alert")).toContainText(
     "Test sign-in stopped"
+  )
+  await page.getByRole("button", { name: "Close" }).click()
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-google-initialize-count",
+    "1"
+  )
+
+  await page.getByRole("button", { name: "Continue with Google" }).click()
+  await expect(
+    page
+      .getByRole("dialog", { name: "Sign in to Coin" })
+      .getByRole("button", { name: "Google rendered sign-in" })
+  ).toBeVisible()
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-google-initialize-count",
+    "1"
   )
   await page.getByRole("button", { name: "Close" }).click()
 

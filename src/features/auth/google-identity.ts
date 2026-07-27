@@ -8,7 +8,6 @@ type GoogleIdConfiguration = {
   client_id: string
   callback: (response: GoogleCredentialResponse) => void
   nonce: string
-  use_fedcm_for_prompt: boolean
 }
 
 type GoogleButtonConfiguration = {
@@ -29,6 +28,21 @@ export type GoogleIdentity = {
   ) => void
 }
 
+type GoogleIdentityController = {
+  identity: GoogleIdentity
+  nonce: string
+  setCredentialHandler: (
+    handler: (response: GoogleCredentialResponse) => void
+  ) => () => void
+}
+
+type GoogleIdentityRuntime = {
+  clientId: string
+  nonce: string
+  credentialHandler?: (response: GoogleCredentialResponse) => void
+  controllerPromise?: Promise<GoogleIdentityController>
+}
+
 declare global {
   interface Window {
     google?: {
@@ -36,6 +50,7 @@ declare global {
         id?: GoogleIdentity
       }
     }
+    __coinGoogleIdentityRuntime?: GoogleIdentityRuntime
   }
 }
 
@@ -116,4 +131,64 @@ export function loadGoogleIdentity() {
   })
 
   return googleIdentityPromise
+}
+
+export function getGoogleIdentityController(clientId: string) {
+  if (typeof window === "undefined") {
+    return Promise.reject(
+      new Error("Google sign-in is only available in the browser.")
+    )
+  }
+
+  const existingRuntime = window.__coinGoogleIdentityRuntime
+  if (existingRuntime && existingRuntime.clientId !== clientId) {
+    return Promise.reject(
+      new Error(
+        "The Google client ID changed. Reload the page before signing in."
+      )
+    )
+  }
+
+  const runtime =
+    existingRuntime ??
+    ({
+      clientId,
+      nonce: generateGoogleNonce(),
+    } satisfies GoogleIdentityRuntime)
+
+  window.__coinGoogleIdentityRuntime = runtime
+
+  runtime.controllerPromise ??= (async () => {
+    try {
+      const identity = await loadGoogleIdentity()
+      const hashedNonce = await hashGoogleNonce(runtime.nonce)
+
+      identity.initialize({
+        client_id: clientId,
+        callback: (response) => runtime.credentialHandler?.(response),
+        nonce: hashedNonce,
+      })
+
+      return {
+        identity,
+        nonce: runtime.nonce,
+        setCredentialHandler: (handler) => {
+          runtime.credentialHandler = handler
+
+          return () => {
+            if (runtime.credentialHandler === handler) {
+              runtime.credentialHandler = undefined
+            }
+          }
+        },
+      }
+    } catch (error) {
+      if (window.__coinGoogleIdentityRuntime === runtime) {
+        window.__coinGoogleIdentityRuntime = undefined
+      }
+      throw error
+    }
+  })()
+
+  return runtime.controllerPromise
 }
