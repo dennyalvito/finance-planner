@@ -8,14 +8,15 @@ type GoogleIdConfiguration = {
   client_id: string
   callback: (response: GoogleCredentialResponse) => void
   nonce: string
+  use_fedcm_for_button: boolean
 }
 
 type GoogleButtonConfiguration = {
   type: "standard"
-  theme: "outline"
+  theme: "outline" | "filled_black" | "outline_dark"
   size: "large"
   text: "continue_with"
-  shape: "rectangular"
+  shape: "rectangular" | "pill"
   logo_alignment: "left"
   width: number
 }
@@ -167,6 +168,7 @@ export function getGoogleIdentityController(clientId: string) {
         client_id: clientId,
         callback: (response) => runtime.credentialHandler?.(response),
         nonce: hashedNonce,
+        use_fedcm_for_button: false,
       })
 
       return {
