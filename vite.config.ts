@@ -18,7 +18,7 @@ const config = defineConfig({
     headers: googleIdentityHeaders,
   },
   preview: {
-    port: 3000,
+    port: 5000,
     strictPort: true,
     headers: googleIdentityHeaders,
   },
