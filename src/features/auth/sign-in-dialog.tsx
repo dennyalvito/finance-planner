@@ -1,6 +1,4 @@
-import { useCallback } from "react"
 import { CircleDollarSignIcon } from "lucide-react"
-import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -30,15 +28,13 @@ function CoinMark() {
 }
 
 function SignInActions({
-  onSuccess,
   onContinueAsGuest,
 }: {
-  onSuccess: () => void
   onContinueAsGuest: () => void
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <GoogleSignInButton onSuccess={onSuccess} />
+      <GoogleSignInButton />
       <Button type="button" variant="ghost" onClick={onContinueAsGuest}>
         Continue as guest
       </Button>
@@ -58,14 +54,9 @@ export function SignInDialog({
 }) {
   const isMobile = useIsMobile()
 
-  const handleSuccess = useCallback(() => {
-    toast.success("Signed in. Your cloud workspace is ready.")
+  const handleContinueAsGuest = () => {
     onOpenChange(false)
-  }, [onOpenChange])
-
-  const handleContinueAsGuest = useCallback(() => {
-    onOpenChange(false)
-  }, [onOpenChange])
+  }
 
   if (isMobile) {
     return (
@@ -80,10 +71,7 @@ export function SignInDialog({
             </DrawerDescription>
           </DrawerHeader>
           <DrawerFooter className="pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-            <SignInActions
-              onSuccess={handleSuccess}
-              onContinueAsGuest={handleContinueAsGuest}
-            />
+            <SignInActions onContinueAsGuest={handleContinueAsGuest} />
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -102,10 +90,7 @@ export function SignInDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <SignInActions
-          onSuccess={handleSuccess}
-          onContinueAsGuest={handleContinueAsGuest}
-        />
+        <SignInActions onContinueAsGuest={handleContinueAsGuest} />
       </DialogContent>
     </Dialog>
   )

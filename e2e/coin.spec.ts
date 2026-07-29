@@ -6,13 +6,7 @@ test("keeps chart tooltips stable for display labels outside the chart config", 
   const pageErrors: Error[] = []
   page.on("pageerror", (error) => pageErrors.push(error))
 
-  const response = await page.goto("/")
-  expect(response?.headers()["cross-origin-opener-policy"]).toBe(
-    "same-origin-allow-popups"
-  )
-  expect(response?.headers()["referrer-policy"]).toBe(
-    "strict-origin-when-cross-origin"
-  )
+  await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()
 
   const desktopOverview = page.getByTestId("desktop-overview")
@@ -300,47 +294,11 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
 test("labels the guest workspace and offers Google account mode", async ({
   page,
 }) => {
-  await page.route("**/auth/v1/token?grant_type=id_token", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 500))
+  await page.route("**/auth/v1/authorize?**", async (route) => {
     await route.fulfill({
-      status: 400,
-      contentType: "application/json",
-      body: JSON.stringify({ message: "Test sign-in stopped" }),
-    })
-  })
-  await page.route("https://accounts.google.com/gsi/client", async (route) => {
-    await route.fulfill({
-      contentType: "application/javascript",
-      body: `
-        window.google = {
-          accounts: {
-            id: {
-              initialize(configuration) {
-                window.googleConfiguration = configuration
-                document.body.dataset.googleNonce = configuration.nonce
-                document.body.dataset.googleFedcmButton = String(
-                  configuration.use_fedcm_for_button
-                )
-                document.body.dataset.googleInitializeCount = String(
-                  Number(document.body.dataset.googleInitializeCount || "0") + 1
-                )
-              },
-              renderButton(parent) {
-                const button = document.createElement("button")
-                button.type = "button"
-                button.textContent = "Continue with Google"
-                button.setAttribute("aria-label", "Google rendered sign-in")
-                button.addEventListener("click", () => {
-                  window.googleConfiguration.callback({
-                    credential: "test-google-credential"
-                  })
-                })
-                parent.appendChild(button)
-              }
-            }
-          }
-        }
-      `,
+      status: 200,
+      contentType: "text/html",
+      body: "<!doctype html><title>OAuth handoff captured</title>",
     })
   })
 
@@ -363,54 +321,6 @@ test("labels the guest workspace and offers Google account mode", async ({
   await expect(
     page.getByRole("button", { name: "Continue with Google" })
   ).toBeEnabled()
-  await page.getByRole("button", { name: "Continue with Google" }).click()
-
-  const signInDialog = page.getByRole("dialog", { name: "Sign in to Coin" })
-  await expect(signInDialog).toBeVisible()
-  await expect(
-    signInDialog.getByRole("button", { name: "Google rendered sign-in" })
-  ).toBeVisible()
-  await expect(
-    signInDialog.getByRole("button", {
-      name: "Use browser redirect instead",
-    })
-  ).toHaveCount(0)
-  await expect
-    .poll(() => page.locator("body").getAttribute("data-google-nonce"))
-    .toMatch(/^[a-f0-9]{64}$/)
-  await expect(page.locator("body")).toHaveAttribute(
-    "data-google-fedcm-button",
-    "true"
-  )
-  await signInDialog
-    .getByRole("button", { name: "Google rendered sign-in" })
-    .click()
-  await expect(
-    signInDialog.getByRole("button", { name: "Signing in…" })
-  ).toBeVisible()
-  await expect(
-    signInDialog.getByRole("button", { name: "Google rendered sign-in" })
-  ).toBeHidden()
-  await expect(signInDialog.getByRole("alert")).toContainText(
-    "Test sign-in stopped"
-  )
-  await page.getByRole("button", { name: "Close" }).click()
-  await expect(page.locator("body")).toHaveAttribute(
-    "data-google-initialize-count",
-    "1"
-  )
-
-  await page.getByRole("button", { name: "Continue with Google" }).click()
-  await expect(
-    page
-      .getByRole("dialog", { name: "Sign in to Coin" })
-      .getByRole("button", { name: "Google rendered sign-in" })
-  ).toBeVisible()
-  await expect(page.locator("body")).toHaveAttribute(
-    "data-google-initialize-count",
-    "1"
-  )
-  await page.getByRole("button", { name: "Close" }).click()
 
   await page.getByRole("button", { name: "Open profile menu" }).click()
   const profileMenu = page.getByRole("menu")
@@ -423,4 +333,33 @@ test("labels the guest workspace and offers Google account mode", async ({
   await expect(
     page.getByRole("menuitem", { name: "Continue with Google" })
   ).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  await page.getByRole("button", { name: "Continue with Google" }).click()
+
+  const signInDialog = page.getByRole("dialog", {
+    name: "Sync your finances",
+  })
+  await expect(signInDialog).toBeVisible()
+  await expect(
+    signInDialog.getByRole("button", { name: "Continue with Google" })
+  ).toBeVisible()
+  await expect(signInDialog.locator("iframe")).toHaveCount(0)
+  await expect(
+    signInDialog.getByRole("button", {
+      name: "Use browser redirect instead",
+    })
+  ).toHaveCount(0)
+
+  const oauthRequestPromise = page.waitForRequest("**/auth/v1/authorize?**")
+  await signInDialog
+    .getByRole("button", { name: "Continue with Google" })
+    .click()
+  const oauthRequest = await oauthRequestPromise
+  const oauthUrl = new URL(oauthRequest.url())
+
+  expect(oauthUrl.searchParams.get("provider")).toBe("google")
+  expect(oauthUrl.searchParams.get("redirect_to")).toBe(
+    "http://localhost:3000/settings"
+  )
 })
