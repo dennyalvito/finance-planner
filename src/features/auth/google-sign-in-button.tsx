@@ -1,127 +1,39 @@
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
+import type { ComponentProps } from "react"
 
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { useAuth } from "@/features/auth/auth-provider"
-import {
-  getGoogleClientId,
-  getGoogleIdentityController,
-} from "@/features/auth/google-identity"
-import { cn } from "@/lib/utils"
 
-type GoogleButtonStatus = "loading" | "ready" | "submitting" | "error"
+function GoogleIcon(props: ComponentProps<"svg">) {
+  return (
+    <svg viewBox="0 0 18 18" {...props}>
+      <path
+        fill="#4285f4"
+        d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.797 2.716v2.258h2.909c1.702-1.567 2.684-3.875 2.684-6.614"
+      />
+      <path
+        fill="#34a853"
+        d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.909-2.259c-.806.54-1.835.859-3.047.859-2.344 0-4.328-1.585-5.037-3.714H.956v2.332A9 9 0 0 0 9 18"
+      />
+      <path
+        fill="#fbbc05"
+        d="M3.963 10.706A5.4 5.4 0 0 1 3.682 9c0-.592.102-1.167.281-1.706V4.962H.956A9 9 0 0 0 0 9c0 1.45.347 2.824.956 4.038z"
+      />
+      <path
+        fill="#ea4335"
+        d="M9 3.58c1.322 0 2.508.454 3.442 1.345l2.582-2.582C13.463.89 11.43 0 9 0A9 9 0 0 0 .956 4.962l3.007 2.332C4.672 5.165 6.656 3.58 9 3.58"
+      />
+    </svg>
+  )
+}
 
-export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
-  const { signInWithGoogleIdToken } = useAuth()
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [status, setStatus] = useState<GoogleButtonStatus>("loading")
+export function GoogleSignInButton() {
+  const { configured, signInWithGoogle } = useAuth()
+  const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>()
-  const clientId = getGoogleClientId()
 
-  useEffect(() => {
-    const container = containerRef.current
-    if (!clientId || !container) return
-
-    let active = true
-    let releaseCredentialHandler: (() => void) | undefined
-    let releaseButtonLoadHandler: (() => void) | undefined
-    let readyFallback: number | undefined
-
-    const initialize = async () => {
-      try {
-        setStatus("loading")
-        setErrorMessage(undefined)
-
-        const controller = await getGoogleIdentityController(clientId)
-
-        if (!active) return
-
-        releaseCredentialHandler = controller.setCredentialHandler(
-          (response) => {
-            if (!active) {
-              return
-            }
-
-            if (!response.credential) {
-              setStatus("error")
-              setErrorMessage("Google did not return a sign-in credential.")
-              return
-            }
-
-            setStatus("submitting")
-            void signInWithGoogleIdToken(response.credential, controller.nonce)
-              .then(() => {
-                if (active) onSuccess()
-              })
-              .catch((error: unknown) => {
-                if (!active) return
-                setStatus("error")
-                setErrorMessage(
-                  error instanceof Error
-                    ? error.message
-                    : "Google sign-in failed."
-                )
-              })
-          }
-        )
-
-        container.replaceChildren()
-        controller.identity.renderButton(container, {
-          type: "standard",
-          theme: "outline_dark",
-          size: "large",
-          text: "continue_with",
-          shape: "rectangular",
-          logo_alignment: "left",
-          width: Math.min(container.clientWidth || 320, 400),
-        })
-
-        const markReady = () => {
-          if (readyFallback !== undefined) {
-            window.clearTimeout(readyFallback)
-            readyFallback = undefined
-          }
-          if (active) setStatus("ready")
-        }
-        const iframe = container.querySelector("iframe")
-
-        if (iframe) {
-          iframe.style.display = "block"
-          iframe.style.width = "100%"
-          iframe.style.height = "40px"
-          iframe.style.backgroundColor = "transparent"
-          iframe.style.colorScheme = "dark"
-          iframe.addEventListener("load", markReady, { once: true })
-          releaseButtonLoadHandler = () =>
-            iframe.removeEventListener("load", markReady)
-          readyFallback = window.setTimeout(markReady, 1_500)
-        } else {
-          markReady()
-        }
-      } catch (error) {
-        if (!active) return
-        setStatus("error")
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Google sign-in could not be loaded."
-        )
-      }
-    }
-
-    void initialize()
-
-    return () => {
-      active = false
-      releaseCredentialHandler?.()
-      releaseButtonLoadHandler?.()
-      if (readyFallback !== undefined) window.clearTimeout(readyFallback)
-      container.replaceChildren()
-    }
-  }, [clientId, onSuccess, signInWithGoogleIdToken])
-
-  if (!clientId) {
+  if (!configured) {
     return (
       <p role="status" className="text-sm text-muted-foreground">
         Google sign-in is not configured for this environment.
@@ -129,32 +41,37 @@ export function GoogleSignInButton({ onSuccess }: { onSuccess: () => void }) {
     )
   }
 
+  const handleSignIn = async () => {
+    setSubmitting(true)
+    setErrorMessage(undefined)
+
+    try {
+      await signInWithGoogle()
+    } catch (error) {
+      setSubmitting(false)
+      setErrorMessage(
+        error instanceof Error ? error.message : "Google sign-in failed."
+      )
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className="relative mx-auto flex h-10 w-full max-w-[400px] justify-center overflow-hidden bg-muted"
-        aria-busy={status === "loading" || status === "submitting"}
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        disabled={submitting}
+        onClick={() => void handleSignIn()}
       >
-        {status === "loading" && (
-          <Skeleton className="absolute inset-0 h-10 w-full" />
+        {submitting ? (
+          <Spinner data-icon="inline-start" />
+        ) : (
+          <GoogleIcon aria-hidden="true" data-icon="inline-start" />
         )}
-        <div
-          ref={containerRef}
-          data-testid="google-sign-in-button"
-          className={cn(
-            "flex h-10 w-full justify-center transition-opacity duration-150",
-            status === "loading" || status === "submitting"
-              ? "pointer-events-none opacity-0"
-              : "opacity-100"
-          )}
-        />
-        {status === "submitting" && (
-          <Button className="absolute inset-0 w-full" disabled>
-            <Spinner data-icon="inline-start" />
-            Signing in…
-          </Button>
-        )}
-      </div>
+        {submitting ? "Opening Google…" : "Continue with Google"}
+      </Button>
       {errorMessage && (
         <p role="alert" className="text-sm text-destructive">
           {errorMessage}
