@@ -4,13 +4,11 @@ Whatever action you can do yourself, Please do yourself, this includes starting 
 
 ## Project Structure & Module Organization
 
-Coin uses TanStack Start, React, TypeScript, and local-first storage. Organize routes in `src/routes/`, features in `src/features/`, shared UI in `src/components/`, finance rules in `src/domain/`, and adapters in `src/data/`. UI accesses storage only through repositories. Assets belong in `public/`; colocate unit tests and keep browser tests in `e2e/`.
+Coin uses TanStack Start, React, TypeScript, Dexie guest storage, and Google-only Supabase account storage. Put routes in `src/routes/`, features in `src/features/`, shared UI in `src/components/`, finance rules in `src/domain/`, and adapters in `src/data/`. UI reaches persistence only through repositories. Read `PRD.md` and `NEXT_STAGE.md` before product work.
 
 The MVP has one unified ledger starting at zero. Net recorded cash flow equals income minus expenses; it is not a real account balance. Store IDR as integer rupiah, never floating-point values.
 
 ## Build, Test, and Development Commands
-
-Expected scripts:
 
 - `pnpm install --frozen-lockfile` - install locked dependencies.
 - `pnpm dev` - start the development server.
@@ -30,11 +28,11 @@ Use two-space indentation, strict TypeScript, and Prettier. Use PascalCase for c
 
 Use shadcn/ui as the component foundation. Before adding UI, run `pnpm dlx shadcn@latest info --json`, check installed components, search the registry, and run `pnpm dlx shadcn@latest docs <component>`. Prefer existing components, built-in variants, full composition, and semantic tokens. Forms use `FieldGroup` and `Field`; overlays require accessible titles. Use shadcn's Chart wrapper.
 
-Use the project package runner for additions and updates. Preview updates with `--dry-run` and `--diff`; never overwrite without approval. Review generated files and honor configured aliases, base, and icons.
+Use the project package runner. Preview updates with `--dry-run` and `--diff`; never overwrite without approval.
 
 ## Testing Guidelines
 
-Use Vitest and React Testing Library for unit/component tests and Playwright for end-to-end flows. Test calculations, repositories, validation, empty states, and transaction CRUD. Prioritize regression risks.
+Use Vitest and React Testing Library for unit/component tests and Playwright for end-to-end flows. Test calculations, repositories, validation, empty states, and transaction CRUD.
 
 ## Commit & Pull Request Guidelines
 
@@ -42,4 +40,4 @@ With no Git history, use Conventional Commits such as `feat: add transaction for
 
 ## Security & Configuration
 
-Never commit secrets or real financial data. Keep local values in ignored `.env.local` files and safe placeholders in `.env.example`. Treat future authentication and synchronization as server-side security boundaries.
+Never commit secrets or real financial data. Browser configuration is limited to the Supabase URL and publishable key; Google credentials stay in Supabase. Preserve RLS ownership checks and never expose service-role credentials. Guest and cloud workspaces remain separate until an explicit, confirmed import flow exists.

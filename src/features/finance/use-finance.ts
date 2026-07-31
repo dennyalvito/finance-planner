@@ -15,18 +15,21 @@ import {
 import { createSupabaseFinanceRepository } from "@/data/supabase-finance-repository"
 import type { NewTransaction, TransactionType } from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
+import {
+  financeIssueFrom,
+  isEmptyCloudSnapshot,
+  safeFinanceError,
+} from "@/features/finance/finance-reliability"
+import type {
+  CloudWorkspaceState,
+  FinanceIssue,
+} from "@/features/finance/finance-reliability"
 import { getSupabaseClient } from "@/utils/supabase"
 
 const emptySnapshot: FinanceSnapshot = {
   transactions: [],
   categories: [],
   budgets: [],
-}
-
-function messageFrom(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : "The finance data request failed."
 }
 
 async function loadCloudSnapshot(repository: FinanceRepository) {
@@ -38,7 +41,7 @@ async function loadCloudSnapshot(repository: FinanceRepository) {
     } catch (error) {
       lastError = error
       if (attempt === 0) {
-        await new Promise((resolve) => window.setTimeout(resolve, 150))
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 150))
       }
     }
   }
@@ -60,12 +63,26 @@ export function useFinance() {
   const userId = auth.user?.id
   const [cloudSnapshot, setCloudSnapshot] =
     useState<FinanceSnapshot>(emptySnapshot)
-  const [cloudLoading, setCloudLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [cloudState, setCloudState] = useState<CloudWorkspaceState>("inactive")
+  const [issue, setIssue] = useState<FinanceIssue | null>(null)
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine
+  )
   const cloudLoadId = useRef(0)
 
   useEffect(() => {
     void ensureFinanceSeed()
+  }, [])
+
+  useEffect(() => {
+    const updateOnlineState = () => setIsOnline(navigator.onLine)
+
+    window.addEventListener("online", updateOnlineState)
+    window.addEventListener("offline", updateOnlineState)
+    return () => {
+      window.removeEventListener("online", updateOnlineState)
+      window.removeEventListener("offline", updateOnlineState)
+    }
   }, [])
 
   const localTransactions = useLiveQuery(listTransactions, [], [])
@@ -88,35 +105,43 @@ export function useFinance() {
     if (!cloudRepository) return
 
     const requestId = ++cloudLoadId.current
-    setCloudLoading(true)
-    setError(null)
+    setCloudState("loading")
+    setIssue(null)
+
+    if (!isOnline) {
+      const offlineIssue = financeIssueFrom("load", false)
+      setCloudState("offline")
+      setIssue(offlineIssue)
+      throw safeFinanceError(offlineIssue)
+    }
+
     try {
       const snapshot = await loadCloudSnapshot(cloudRepository)
       if (requestId === cloudLoadId.current) {
         setCloudSnapshot(snapshot)
+        setCloudState(isEmptyCloudSnapshot(snapshot) ? "empty" : "ready")
       }
-    } catch (loadError) {
+    } catch {
       if (requestId === cloudLoadId.current) {
-        setError(messageFrom(loadError))
+        const loadIssue = financeIssueFrom("load", isOnline)
+        setCloudState(loadIssue.kind === "offline" ? "offline" : "error")
+        setIssue(loadIssue)
       }
-      throw loadError
-    } finally {
-      if (requestId === cloudLoadId.current) {
-        setCloudLoading(false)
-      }
+      throw safeFinanceError(financeIssueFrom("load", isOnline))
     }
-  }, [cloudRepository])
+  }, [cloudRepository, isOnline])
 
   useEffect(() => {
     if (!cloudRepository) {
       cloudLoadId.current += 1
       setCloudSnapshot(emptySnapshot)
-      setCloudLoading(false)
-      setError(null)
+      setCloudState("inactive")
+      setIssue(null)
       return
     }
 
     setCloudSnapshot(emptySnapshot)
+    setCloudState("loading")
     void reloadCloud().catch(() => undefined)
 
     return () => {
@@ -132,17 +157,30 @@ export function useFinance() {
         throw new Error("The active workspace is still loading.")
       }
 
-      setError(null)
-      try {
-        const result = await operation(repository)
-        if (repository.storage === "cloud") await reloadCloud()
-        return result
-      } catch (mutationError) {
-        setError(messageFrom(mutationError))
-        throw mutationError
+      setIssue(null)
+
+      if (repository.storage === "cloud" && !isOnline) {
+        const offlineIssue = financeIssueFrom("mutation", false)
+        setIssue(offlineIssue)
+        throw safeFinanceError(offlineIssue)
       }
+
+      let result: TResult
+      try {
+        result = await operation(repository)
+      } catch {
+        const mutationIssue = financeIssueFrom("mutation", isOnline)
+        setIssue(mutationIssue)
+        throw safeFinanceError(mutationIssue)
+      }
+
+      if (repository.storage === "cloud") {
+        await reloadCloud().catch(() => undefined)
+      }
+
+      return result
     },
-    [reloadCloud, repository]
+    [isOnline, reloadCloud, repository]
   )
 
   const addTransaction = useCallback(
@@ -189,13 +227,20 @@ export function useFinance() {
             budgets: localBudgets,
           }
         : emptySnapshot
+  const visibleCloudState =
+    auth.status === "authenticated" && !isOnline && cloudState !== "loading"
+      ? "offline"
+      : cloudState
 
   return useMemo(
     () => ({
       ...snapshot,
       storage: repository?.storage ?? "device",
-      isLoading: auth.status === "loading" || cloudLoading,
-      error,
+      isLoading: auth.status === "loading" || cloudState === "loading",
+      isRefreshing: cloudState === "loading",
+      cloudState: visibleCloudState,
+      issue,
+      retryCloud: reloadCloud,
       addTransaction,
       createCategory,
       deleteTransaction,
@@ -206,13 +251,15 @@ export function useFinance() {
       addTransaction,
       auth.status,
       clearDemoTransactions,
-      cloudLoading,
+      cloudState,
       createCategory,
       deleteTransaction,
-      error,
+      issue,
+      reloadCloud,
       repository?.storage,
       saveBudget,
       snapshot,
+      visibleCloudState,
     ]
   )
 }

@@ -170,7 +170,7 @@ export function TransactionDialog({
         note: note.trim(),
       })
       toast.success("Transaction added", {
-        description: "Your local ledger has been updated.",
+        description: "Your ledger has been updated.",
       })
       reset()
       onOpenChange(false)
