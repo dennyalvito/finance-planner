@@ -164,6 +164,7 @@ test("records and persists a transaction from the desktop dashboard", async ({
 test("uses a bottom dock and transaction drawer on mobile", async ({
   page,
 }) => {
+  await page.clock.setFixedTime(new Date("2026-07-25T12:00:00+07:00"))
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()

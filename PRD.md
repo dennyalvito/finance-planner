@@ -1,7 +1,10 @@
 # Coin Product Requirements Document
 
-Status: Backend foundation implemented; guest import strategy pending  
-Last updated: 2026-07-25
+Status: Core MVP and account reliability implemented; import decision pending
+
+Last updated: 2026-07-30
+
+Execution handoff: [NEXT_STAGE.md](./NEXT_STAGE.md)
 
 ## 1. Product summary
 
@@ -12,11 +15,10 @@ not claim to know a real bank account balance.
 
 The current MVP is a responsive web application with a unified ledger,
 dashboard summaries, cash-flow and spending charts, transaction management,
-custom categories, and monthly budgets. All current data is stored in the
-browser with Dexie and IndexedDB.
-
-Coin now includes an optional account-backed workspace using Supabase.
-Using Coin without an account must remain a complete, first-class experience.
+custom categories, and monthly budgets. Guest data is stored in the browser
+with Dexie and IndexedDB. Signed-in users have a separate account-backed
+workspace in Supabase Postgres. Using Coin without an account remains a
+complete, first-class experience.
 
 ## 2. Product principles
 
@@ -41,11 +43,16 @@ Using Coin without an account must remain a complete, first-class experience.
 - Overview, transactions, budgets, and settings routes
 - Income and expense transaction creation
 - Transaction deletion
-- Built-in and custom categories
+- Built-in categories for guests and account-owned custom categories
 - Monthly category budgets
 - Recorded income, expenses, net movement, and savings-rate calculations
 - Cash-flow and category-spending charts
+- Mobile period filtering with preset and custom calendar ranges
 - Dexie/IndexedDB persistence
+- Google-only Supabase OAuth and account-mode cloud persistence
+- Storage-mode indicators in navigation, profile, and settings
+- Cloud loading, empty, offline, failed-load, failed-mutation, and retry UX
+- Transactional RLS tests and an authenticated browser verification workflow
 - Seeded example transactions that are removed when real data is added
 - Unit tests for finance calculations
 - Playwright coverage for critical guest workflows
@@ -56,6 +63,11 @@ Using Coin without an account must remain a complete, first-class experience.
 - Clearing site data removes the guest ledger.
 - Account mode is online-required in the first release.
 - There is no guest-to-account import flow yet.
+- The authenticated browser workflow needs dedicated test credentials to run.
+- The local RLS suite needs Docker and a running local Supabase stack.
+- Real Google identity continuity remains a manual verification.
+- Transaction editing, budget removal, and category rename/delete are absent.
+- Coin is not yet an installable PWA.
 - Realtime synchronization and signed-in offline writes are deferred.
 
 ## 4. Goals for the backend stage
@@ -266,12 +278,14 @@ Authentication is optional at the product level but required for account mode.
 ### Provider decision
 
 Coin uses Google authentication through Supabase Auth. The primary entry point
-is Google's official pre-built button using an ID-token exchange with nonce
-validation. Supabase's browser redirect OAuth flow remains available as a
-fallback. There is no email/password, magic-link, or email OTP signup in the
-first release. Guest mode remains the alternative for users who do not want to
-use Google or create a cloud workspace. SMTP configuration is therefore not
-required.
+is Coin's own branded application button, which calls
+`supabase.auth.signInWithOAuth({ provider: "google" })`. Supabase Auth owns the
+browser redirect to Google and the return to Coin. The application does not
+load Google Identity Services, render a Google iframe, or perform a direct
+ID-token exchange. There is no email/password, magic-link, or email OTP signup
+in the first release. Guest mode remains the alternative for users who do not
+want to use Google or create a cloud workspace. SMTP configuration is
+therefore not required.
 
 ### Session behavior
 
@@ -279,6 +293,7 @@ required.
 - The provider has explicit `loading`, `guest`, and `authenticated` states.
 - Repository selection waits for the initial session check to avoid briefly showing the wrong workspace.
 - Expired or signed-out sessions return the app to guest mode without deleting local data.
+- OAuth returns users to the Coin route where they initiated sign-in.
 - Redirect URLs are allow-listed in Supabase for local development and production.
 
 ### Client and server session scope
@@ -309,24 +324,24 @@ Expected public client configuration:
 ```bash
 VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
-VITE_GOOGLE_CLIENT_ID=
 ```
 
 The application must detect missing configuration and continue in guest mode
 without throwing or attempting cloud requests.
+
+The Google OAuth client ID and secret are configured only in Supabase Auth.
+Neither value is required by Coin's frontend runtime.
 
 Project-specific secrets used by CI, migration tooling, or future server code
 must not use the `VITE_` prefix.
 
 ## 13. Delivery plan
 
-### Phase 0 — Strategy approval
+### Phase 0 — Product strategy (implemented)
 
-- Agree on storage-mode behavior.
-- Choose the first auth method.
-- Decide how guest import should work.
-- Decide whether local Supabase through Docker is required for every developer
-  or whether a shared hosted development project is acceptable.
+- Storage-mode behavior, Google-only auth, and the Settings-based import entry
+  point are decided and recorded.
+- The local-versus-hosted database test environment remains a Phase 5 decision.
 
 ### Phase 1 — Supabase foundation (implemented)
 
@@ -345,13 +360,17 @@ must not use the `VITE_` prefix.
 - Implement the Supabase repository.
 - Add repository contract and mapping tests.
 
-### Phase 3 — Auth and mode selection (implemented; dashboard OAuth credentials pending verification)
+### Phase 3 — Auth and mode selection (implemented)
 
 - Add auth session provider.
-- Add sign-in and sign-out UI.
+- Add Google-only Supabase OAuth sign-in and sign-out UI.
 - Select the repository from resolved auth state.
-- Add clear storage-mode indicators and loading/error states.
+- Add clear storage-mode indicators and initial loading states.
 - Verify that sign-out restores the preserved guest workspace.
+- Verify the hosted Supabase authorize endpoint hands off to Google.
+
+Production-domain OAuth and a complete authenticated browser workflow remain
+Phase 5 verification work.
 
 ### Phase 4 — Guest import
 
@@ -402,7 +421,7 @@ Both repositories should satisfy the same behavioral contract for:
 - A user can sign in, create data, reload, and see the same cloud workspace.
 - A user can sign out and see the earlier guest workspace.
 - A failed network request does not falsely report a successful finance write.
-- The first-login import prompt behaves according to the user's choice.
+- The Settings import flow behaves according to the user's explicit choice.
 
 ## 15. Product and UX requirements
 
@@ -416,11 +435,14 @@ Both repositories should satisfy the same behavioral contract for:
 
 ## 16. Open decisions
 
-1. Should guest import be offered immediately after sign-in or from Settings?
-2. If the cloud workspace already has data, should Coin support merging in the first import release or require choosing one workspace?
-3. Is a local Docker-based Supabase stack required for CI, or will hosted database tests be sufficient?
-4. What final production/custom domain should be allow-listed after the Vercel deployment exists?
-5. What is the account and cloud-data deletion policy?
+1. If the cloud workspace already has data, should the first import release
+   support merging or require choosing one workspace?
+2. Is a local Docker-based Supabase stack required for CI, or will hosted
+   database tests be sufficient?
+3. What final production/custom domain should be allow-listed after the Vercel
+   deployment exists?
+4. What is the account and cloud-data deletion policy?
+5. Should installable PWA support be part of beta hardening or a later release?
 
 ## 17. Recorded initial decisions
 

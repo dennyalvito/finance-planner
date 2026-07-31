@@ -119,6 +119,7 @@ import { SignInDialog } from "@/features/auth/sign-in-dialog"
 import { BudgetDialog } from "@/features/finance/budget-dialog"
 import { CategoryManager } from "@/features/finance/category-manager"
 import { getCategoryIcon } from "@/features/finance/category-icon"
+import { CloudWorkspaceStatus } from "@/features/finance/cloud-workspace-status"
 import { TransactionDialog } from "@/features/finance/transaction-dialog"
 import { useFinance } from "@/features/finance/use-finance"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -358,7 +359,20 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
             data-view={view}
             className="coin-route-enter mx-auto flex w-full max-w-384 flex-1 flex-col px-4 py-5 sm:px-6 md:py-7 xl:px-8"
           >
-            <Outlet />
+            <div className="flex flex-col gap-5">
+              <CloudWorkspaceStatus
+                state={finance.cloudState}
+                issue={finance.issue}
+                isRefreshing={finance.isRefreshing}
+                onRetry={() => void finance.retryCloud()}
+              />
+              {finance.cloudState !== "loading" &&
+                finance.cloudState !== "error" &&
+                !(
+                  finance.cloudState === "offline" &&
+                  finance.issue?.source === "load"
+                ) && <Outlet />}
+            </div>
           </div>
         </SidebarInset>
 
@@ -1637,7 +1651,7 @@ function DeleteTransactionButton({
           </AlertDialogMedia>
           <AlertDialogTitle>Delete this transaction?</AlertDialogTitle>
           <AlertDialogDescription>
-            This removes {formatRupiah(transaction.amount)} from the local
+            This removes {formatRupiah(transaction.amount)} from the recorded
             ledger and recalculates every summary.
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -1646,9 +1660,16 @@ function DeleteTransactionButton({
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
-              void onDelete(transaction.id).then(() =>
-                toast.success("Transaction deleted")
-              )
+              void onDelete(transaction.id)
+                .then(() => toast.success("Transaction deleted"))
+                .catch((error: unknown) => {
+                  toast.error("Could not delete transaction", {
+                    description:
+                      error instanceof Error
+                        ? error.message
+                        : "Please try again.",
+                  })
+                })
             }}
           >
             Delete
