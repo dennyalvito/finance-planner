@@ -62,12 +62,20 @@ import {
 } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import {
-  Dialog as SheetDialog,
-  DialogContent as SheetContent,
-  DialogDescription as SheetDescription,
-  DialogHeader as SheetHeader,
-  DialogTitle as SheetTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -124,7 +132,6 @@ import { TransactionDialog } from "@/features/finance/transaction-dialog"
 import { useFinance } from "@/features/finance/use-finance"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import type { DateRange as CalendarDateRange } from "react-day-picker"
 
 const CashFlowChart = lazy(() =>
   import("@/features/finance/cash-flow-chart").then((module) => ({
@@ -824,7 +831,7 @@ function OverviewView({
 }) {
   const isMobile = useIsMobile()
   const chartsReady = useOverviewChartsReady()
-  const [period, setPeriod] = useState<PeriodPreset>("month")
+  const [period, setPeriod] = useState<PeriodPreset>("day")
   const [periodOpen, setPeriodOpen] = useState(false)
   const initialCustomRange = useMemo(
     () => getPeriodRange("month", { from: "", to: "" }),
@@ -877,7 +884,10 @@ function OverviewView({
         cashFlow={mobileCashFlow}
         chartsReady={chartsReady && isMobile}
         period={period}
-        periodLabel={getPeriodLabel(period, activeRange)}
+        periodLabel={getPeriodLabel(
+          period,
+          period === "custom" ? customRange : activeRange
+        )}
         periodOpen={periodOpen}
         customRange={customRange}
         onPeriodOpenChange={setPeriodOpen}
@@ -1234,44 +1244,55 @@ function PeriodFilterDrawer({
   onPeriodChange: (period: PeriodPreset) => void
   onCustomRangeChange: (range: DateRange) => void
 }) {
+  const [draftPeriod, setDraftPeriod] = useState<PeriodPreset>(period)
+  const [draftRange, setDraftRange] = useState<DateRange>(customRange)
+  const [activeDateField, setActiveDateField] = useState<"from" | "to" | null>(
+    null
+  )
   const customRangeInvalid =
-    !customRange.from || !customRange.to || customRange.from > customRange.to
-  const selectedRange: CalendarDateRange = {
-    from: dateFromKey(customRange.from),
-    to: dateFromKey(customRange.to),
+    !draftRange.from || !draftRange.to || draftRange.from > draftRange.to
+
+  useEffect(() => {
+    if (!open) return
+    setDraftPeriod(period)
+    setDraftRange(customRange)
+  }, [customRange, open, period])
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setActiveDateField(null)
+    onOpenChange(nextOpen)
   }
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange}>
-      <SheetContent
+    <Drawer open={open} onOpenChange={handleOpenChange}>
+      <DrawerContent
         data-testid="period-filter-drawer"
-        showCloseButton={false}
-        className="top-auto right-0 bottom-0 left-0 max-h-[92svh] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-t-2xl rounded-b-none p-0 sm:max-w-none data-open:zoom-in-100 data-open:slide-in-from-bottom-4 data-closed:zoom-out-100 data-closed:slide-out-to-bottom-4"
+        className="gap-0 overflow-hidden data-[vaul-drawer-direction=bottom]:max-h-[92svh]"
       >
-        <div
-          aria-hidden="true"
-          className="mx-auto mt-3 h-1 w-20 shrink-0 rounded-full bg-muted"
-        />
-        <SheetHeader className="shrink-0 gap-1 px-4 pt-4 pb-3 text-center">
-          <SheetTitle>Choose a period</SheetTitle>
-          <SheetDescription>
+        <DrawerHeader className="shrink-0 pb-3">
+          <DrawerTitle>Choose a period</DrawerTitle>
+          <DrawerDescription>
             The summary, category chart, and recent activity update together.
-          </SheetDescription>
-        </SheetHeader>
+          </DrawerDescription>
+        </DrawerHeader>
         <div className="min-h-0 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <ToggleGroup
             type="single"
-            value={period}
+            value={draftPeriod}
             variant="outline"
             className="grid w-full grid-cols-2"
             onValueChange={(value) => {
               if (!value) return
               const nextPeriod = value as PeriodPreset
-              if (nextPeriod === "custom" && period !== "custom") {
-                onCustomRangeChange({ from: "", to: "" })
+              if (nextPeriod === "custom") {
+                if (draftPeriod !== "custom") {
+                  setDraftRange({ from: "", to: "" })
+                }
+                setDraftPeriod(nextPeriod)
+                return
               }
               onPeriodChange(nextPeriod)
-              if (nextPeriod !== "custom") onOpenChange(false)
+              handleOpenChange(false)
             }}
           >
             {periodOptions.map((option) => (
@@ -1285,54 +1306,135 @@ function PeriodFilterDrawer({
             ))}
           </ToggleGroup>
 
-          <Collapsible open={period === "custom"}>
+          <Collapsible open={draftPeriod === "custom"}>
             <CollapsibleContent className="coin-collapsible-content">
-              <div className="mt-4 flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border bg-card px-3 py-2">
-                    <p className="text-xs text-muted-foreground">From</p>
-                    <p className="mt-1 truncate text-sm font-medium">
-                      {formatPeriodDate(customRange.from)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border bg-card px-3 py-2">
-                    <p className="text-xs text-muted-foreground">To</p>
-                    <p className="mt-1 truncate text-sm font-medium">
-                      {formatPeriodDate(customRange.to)}
-                    </p>
-                  </div>
-                </div>
-                <Calendar
-                  mode="range"
-                  selected={selectedRange}
-                  defaultMonth={selectedRange.from ?? new Date()}
-                  onSelect={(range) => {
-                    if (!range?.from) return
-                    onCustomRangeChange({
-                      from: dateKey(range.from),
-                      to: range.to ? dateKey(range.to) : "",
-                    })
-                  }}
-                  disabled={{ after: new Date() }}
-                  className="mx-auto"
-                />
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+                  aria-label={`Select from date, currently ${formatPeriodDate(draftRange.from)}`}
+                  onClick={() => setActiveDateField("from")}
+                >
+                  <span className="text-xs font-normal text-muted-foreground">
+                    From
+                  </span>
+                  <span className="w-full truncate text-left font-medium">
+                    {formatPeriodDate(draftRange.from)}
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+                  aria-label={`Select to date, currently ${formatPeriodDate(draftRange.to)}`}
+                  onClick={() => setActiveDateField("to")}
+                >
+                  <span className="text-xs font-normal text-muted-foreground">
+                    To
+                  </span>
+                  <span className="w-full truncate text-left font-medium">
+                    {formatPeriodDate(draftRange.to)}
+                  </span>
+                </Button>
               </div>
             </CollapsibleContent>
           </Collapsible>
         </div>
-        {period === "custom" && (
-          <div className="shrink-0 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {draftPeriod === "custom" && (
+          <DrawerFooter className="shrink-0 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
             <Button
               className="w-full"
               disabled={customRangeInvalid}
-              onClick={() => onOpenChange(false)}
+              onClick={() => {
+                onCustomRangeChange(draftRange)
+                onPeriodChange("custom")
+                handleOpenChange(false)
+              }}
             >
               Apply custom period
             </Button>
-          </div>
+          </DrawerFooter>
         )}
-      </SheetContent>
-    </SheetDialog>
+        <PeriodDateDialog
+          field={activeDateField}
+          customRange={draftRange}
+          onFieldChange={setActiveDateField}
+          onCustomRangeChange={setDraftRange}
+        />
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+function PeriodDateDialog({
+  field,
+  customRange,
+  onFieldChange,
+  onCustomRangeChange,
+}: {
+  field: "from" | "to" | null
+  customRange: DateRange
+  onFieldChange: (field: "from" | "to" | null) => void
+  onCustomRangeChange: (range: DateRange) => void
+}) {
+  const today = new Date()
+  const fromDate = dateFromKey(customRange.from)
+  const selectedDate = field ? dateFromKey(customRange[field]) : undefined
+  const disabledDates =
+    field === "to" && fromDate
+      ? [{ before: fromDate }, { after: today }]
+      : { after: today }
+
+  const selectDate = (date: Date | undefined) => {
+    if (!date || !field) return
+    const selectedKey = dateKey(date)
+
+    if (field === "from") {
+      onCustomRangeChange({
+        from: selectedKey,
+        to:
+          customRange.to && customRange.to >= selectedKey ? customRange.to : "",
+      })
+    } else {
+      onCustomRangeChange({ ...customRange, to: selectedKey })
+    }
+
+    onFieldChange(null)
+  }
+
+  return (
+    <Dialog
+      open={field !== null}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onFieldChange(null)
+      }}
+    >
+      <DialogContent
+        data-testid="period-date-dialog"
+        className="w-auto max-w-[calc(100%-1.5rem)] gap-3"
+      >
+        <DialogHeader>
+          <DialogTitle>
+            Select {field === "to" ? "to" : "from"} date
+          </DialogTitle>
+          <DialogDescription>
+            Use the month and year menus to move quickly.
+          </DialogDescription>
+        </DialogHeader>
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          defaultMonth={selectedDate ?? fromDate ?? today}
+          onSelect={selectDate}
+          captionLayout="dropdown"
+          startMonth={new Date(2000, 0, 1)}
+          endMonth={today}
+          disabled={disabledDates}
+          className="mx-auto"
+        />
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1602,7 +1704,7 @@ function TransactionList({
                   "text-sm font-medium tabular-nums",
                   transaction.type === "income"
                     ? "text-positive"
-                    : "text-foreground"
+                    : "text-negative"
                 )}
               >
                 {transaction.type === "income" ? "+" : "-"}

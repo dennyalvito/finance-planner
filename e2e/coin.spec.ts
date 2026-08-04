@@ -206,17 +206,43 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
     page.getByRole("heading", { name: "Net cash flow" })
   ).toBeVisible()
   await expect(page.getByTestId("cash-flow-card")).toBeHidden()
+  await expect(
+    page.getByRole("button", { name: "Change period, currently Today" })
+  ).toBeVisible()
 
   const activeHome = page.getByRole("link", { name: "Home" })
   await expect(activeHome).toHaveAttribute("aria-current", "page")
   await expect(activeHome).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   await page
-    .getByRole("button", { name: "Change period, currently This month" })
+    .getByRole("button", { name: "Change period, currently Today" })
     .click()
   await expect(page.getByTestId("period-filter-drawer")).toBeVisible()
+  const periodBackdrop = await page
+    .locator('[data-slot="drawer-overlay"]')
+    .evaluate((element) => window.getComputedStyle(element).backdropFilter)
+  expect(periodBackdrop).toBe("none")
   await page.getByRole("radio", { name: "Custom" }).click()
+  await expect(
+    page.getByTestId("period-filter-drawer").locator('[data-slot="calendar"]')
+  ).toHaveCount(0)
+  await page.keyboard.press("Escape")
+  await expect(page.getByTestId("period-filter-drawer")).toBeHidden()
+  await expect(
+    page.getByRole("button", { name: "Change period, currently Today" })
+  ).toBeVisible()
+
+  await page
+    .getByRole("button", { name: "Change period, currently Today" })
+    .click()
+  await page.getByRole("radio", { name: "Custom" }).click()
+  await page.getByRole("button", { name: /Select from date/ }).click()
+  const fromDateDialog = page.getByTestId("period-date-dialog")
+  await expect(fromDateDialog).toBeVisible()
+  await expect(fromDateDialog.getByRole("combobox")).toHaveCount(2)
   await page.locator('[data-date="2026-07-10"]').click()
+  await expect(fromDateDialog).toHaveCount(0)
+  await page.getByRole("button", { name: /Select to date/ }).click()
   await page.locator('[data-date="2026-07-20"]').click()
   await page.getByRole("button", { name: "Apply custom period" }).click()
   const customPeriodButton = page.getByRole("button", {
@@ -267,6 +293,12 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   expect(selectedTypeColors).not.toEqual(unselectedTypeColors)
 
   const amountInput = page.getByLabel("Amount")
+  const amountStyles = await amountInput.evaluate((element) => {
+    const styles = window.getComputedStyle(element)
+    return { fontSize: styles.fontSize, fontWeight: styles.fontWeight }
+  })
+  expect(Number.parseFloat(amountStyles.fontSize)).toBeGreaterThanOrEqual(24)
+  expect(Number(amountStyles.fontWeight)).toBeGreaterThanOrEqual(600)
   await amountInput.fill("125000")
   await expect(amountInput).toHaveValue("125.000")
   const foodCategory = page.getByRole("radio", { name: "Food & dining" })
@@ -278,6 +310,9 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
       .getByTestId("mobile-recent-activity")
       .getByText("Food & dining", { exact: true })
   ).toBeVisible()
+  await expect(
+    page.getByTestId("mobile-recent-activity").getByText(/^-Rp/)
+  ).toHaveClass(/text-negative/)
 
   await page.getByRole("link", { name: "Budgets" }).click()
   await expect(page).toHaveURL(/\/budgets$/)

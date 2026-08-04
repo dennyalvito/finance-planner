@@ -233,6 +233,7 @@ export function TransactionDialog({
                 setAmount(sanitizeIdrAmount(event.target.value))
               }
               aria-invalid={amountInvalid}
+              className="h-14 px-4 text-2xl font-semibold tracking-[-0.03em] tabular-nums md:text-2xl"
               autoFocus
             />
             {amountInvalid && (

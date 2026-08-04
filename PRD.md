@@ -2,7 +2,7 @@
 
 Status: Core MVP and account reliability implemented; import decision pending
 
-Last updated: 2026-08-02
+Last updated: 2026-08-04
 
 Execution handoff: [NEXT_STAGE.md](./NEXT_STAGE.md)
 
@@ -47,7 +47,10 @@ complete, first-class experience.
 - Monthly category budgets
 - Recorded income, expenses, net movement, and savings-rate calculations
 - Cash-flow and category-spending charts
-- Mobile period filtering with preset and custom calendar ranges
+- Mobile period filtering defaults to Today, with presets and separate From/To
+  calendar dialogs that support direct month and year selection
+- Semantic negative styling for expense amounts in transaction activity
+- A visually emphasized amount field in mobile transaction entry
 - Dexie/IndexedDB persistence
 - Google-only Supabase OAuth and account-mode cloud persistence
 - Storage-mode indicators in navigation, profile, and settings
