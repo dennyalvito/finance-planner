@@ -41,6 +41,7 @@ test.describe("authenticated cloud workspace", () => {
     const storageKey = `sb-${projectRef}-auth-token`
     const guestNote = `Preserved guest ${crypto.randomUUID()}`
     const cloudNote = `Cloud persistence ${crypto.randomUUID()}`
+    const editedCloudNote = `${cloudNote} edited`
 
     await page.goto("/transactions")
     await page.locator('[data-app-ready="true"]').waitFor()
@@ -74,9 +75,21 @@ test.describe("authenticated cloud workspace", () => {
       .click()
     await expect(page.getByText(cloudNote)).toBeVisible()
 
+    const cloudTransactionRow = page
+      .locator("[data-transaction-row]")
+      .filter({ hasText: cloudNote })
+    await cloudTransactionRow
+      .getByRole("button", { name: /Actions for/ })
+      .click()
+    await page.getByRole("menuitem", { name: "Edit" }).click()
+    await page.getByLabel("Note").fill(editedCloudNote)
+    await page.getByRole("button", { name: "Save changes" }).click()
+    await expect(page.getByText("Transaction updated")).toBeVisible()
+    await expect(page.getByText(editedCloudNote)).toBeVisible()
+
     await page.reload()
     await page.locator('[data-app-ready="true"]').waitFor()
-    await expect(page.getByText(cloudNote)).toBeVisible()
+    await expect(page.getByText(editedCloudNote)).toBeVisible()
 
     await page.goto("/settings")
     await page.getByRole("button", { name: "Sign out" }).click()
@@ -85,12 +98,12 @@ test.describe("authenticated cloud workspace", () => {
     await page.goto("/transactions")
     await page.locator('[data-app-ready="true"]').waitFor()
     await expect(page.getByText(guestNote)).toBeVisible()
-    await expect(page.getByText(cloudNote)).toHaveCount(0)
+    await expect(page.getByText(editedCloudNote)).toHaveCount(0)
 
     const { error: cleanupError } = await client
       .from("transactions")
       .delete()
-      .eq("note", cloudNote)
+      .eq("note", editedCloudNote)
 
     expect(cleanupError).toBeNull()
   })

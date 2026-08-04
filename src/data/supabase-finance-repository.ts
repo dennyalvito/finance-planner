@@ -115,6 +115,25 @@ export function createSupabaseFinanceRepository(
     if (error) throw error
   }
 
+  async function updateTransaction(id: string, transaction: NewTransaction) {
+    const { data, error } = await client
+      .from("transactions")
+      .update({
+        type: transaction.type,
+        amount: transaction.amount,
+        category_id: transaction.categoryId,
+        date: transaction.date,
+        note: transaction.note,
+      })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .select("id")
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) throw new Error("Transaction was not found.")
+  }
+
   async function createCategory(name: string, type: TransactionType) {
     const { data, error } = await client
       .from("categories")
@@ -152,6 +171,7 @@ export function createSupabaseFinanceRepository(
     storage: "cloud",
     load,
     addTransaction,
+    updateTransaction,
     deleteTransaction,
     createCategory,
     saveBudget,

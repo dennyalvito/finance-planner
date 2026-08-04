@@ -2,7 +2,7 @@
 
 Status: Core MVP and account reliability implemented; import decision pending
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 Execution handoff: [NEXT_STAGE.md](./NEXT_STAGE.md)
 
@@ -42,6 +42,8 @@ complete, first-class experience.
 - Responsive desktop sidebar and mobile navigation dock
 - Overview, transactions, budgets, and settings routes
 - Income and expense transaction creation
+- Transaction editing from transaction history and recent overview activity in
+  both guest and account workspaces
 - Transaction deletion
 - Built-in categories for guests and account-owned custom categories
 - Monthly category budgets
@@ -49,6 +51,8 @@ complete, first-class experience.
 - Cash-flow and category-spending charts
 - Mobile period filtering defaults to Today, with presets and separate From/To
   calendar dialogs that support direct month and year selection
+- Transaction history summaries, date/type filters, date grouping, and row
+  actions for editing or deleting an entry
 - Semantic negative styling for expense amounts in transaction activity
 - A visually emphasized amount field in mobile transaction entry
 - Dexie/IndexedDB persistence
@@ -69,7 +73,7 @@ complete, first-class experience.
 - The authenticated browser workflow needs dedicated test credentials to run.
 - The local RLS suite needs Docker and a running local Supabase stack.
 - Real Google identity continuity remains a manual verification.
-- Transaction editing, budget removal, and category rename/delete are absent.
+- Budget removal and category rename/delete are absent.
 - Coin is not yet an installable PWA.
 - Realtime synchronization and signed-in offline writes are deferred.
 
@@ -195,7 +199,7 @@ not on Dexie or Supabase directly.
 The contract should cover:
 
 - Listing transactions, categories, and budgets
-- Adding and deleting a transaction
+- Adding, updating, and deleting a transaction
 - Creating a custom category
 - Saving a monthly category budget
 - Clearing legacy guest example transactions where supported
@@ -403,7 +407,7 @@ Phase 5 verification work.
 
 Both repositories should satisfy the same behavioral contract for:
 
-- Transaction creation and deletion
+- Transaction creation, update, and deletion
 - Category creation
 - Budget upsert
 - Sorting and filtering expectations
