@@ -195,6 +195,13 @@ export function useFinance() {
       runMutation((activeRepository) => activeRepository.deleteTransaction(id)),
     [runMutation]
   )
+  const updateTransaction = useCallback(
+    (id: string, transaction: NewTransaction) =>
+      runMutation((activeRepository) =>
+        activeRepository.updateTransaction(id, transaction)
+      ),
+    [runMutation]
+  )
   const createCategory = useCallback(
     (name: string, type: TransactionType) =>
       runMutation((activeRepository) =>
@@ -242,6 +249,7 @@ export function useFinance() {
       issue,
       retryCloud: reloadCloud,
       addTransaction,
+      updateTransaction,
       createCategory,
       deleteTransaction,
       saveBudget,
@@ -259,6 +267,7 @@ export function useFinance() {
       repository?.storage,
       saveBudget,
       snapshot,
+      updateTransaction,
       visibleCloudState,
     ]
   )

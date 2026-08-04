@@ -2,7 +2,7 @@
 
 Status: Reliability implemented; authenticated verification execution pending
 
-Baseline date: 2026-08-04
+Baseline date: 2026-08-05
 
 ## Purpose
 
@@ -29,6 +29,10 @@ ordered execution handoff.
 - Transaction entry defaults to expense and the first matching category,
   focuses a visually emphasized amount field, and formats IDR thousands while
   typing. Expense amounts use the semantic negative color in recent lists.
+- Transactions can be edited in guest or account mode. The history view shows
+  filtered income, expenses, and net movement, groups entries by date, supports
+  type and preset/custom date filters, and keeps Edit/Delete in a row menu.
+  Compact recent-activity rows on Home expose the same Edit/Delete action menu.
 - Period, transaction, and budget drawers use the same overlay treatment.
 - Guest mode uses Dexie/IndexedDB. Account mode uses Supabase Postgres. The
   repository boundary keeps finance UI independent of storage.
@@ -39,7 +43,8 @@ ordered execution handoff.
   Google SDK loader, FedCM integration, direct ID-token exchange, or
   `VITE_GOOGLE_CLIENT_ID`.
 - Supabase source includes typed tables, built-in categories, constraints,
-  least-privilege grants, and user-owned RLS policies.
+  least-privilege grants, and user-owned RLS policies, including owner-scoped
+  transaction updates.
 - Custom category creation is account-only by current product decision. Guests
   use the built-in category templates.
 - Animations are CSS-based. GSAP is not part of the project.
@@ -48,9 +53,10 @@ ordered execution handoff.
 
 TypeScript, ESLint, the production build, 19 unit/component tests, and all 7
 Playwright guest/browser tests pass. The authenticated browser workflow is
-implemented and skips without dedicated test credentials. The 30-assertion
-pgTAP suite is available as an optional manual security check, but it still
-needs execution in an environment with a running local Supabase stack.
+implemented and skips without dedicated test credentials. The pgTAP suite now
+contains 32 assertions and is available as an optional manual
+security check, but it still needs execution in an environment with a running
+local Supabase stack.
 Automated tests do not complete a real Google account login.
 
 ## Next work, in order
@@ -97,13 +103,12 @@ domain before public launch.
 
 ## Product improvements after P0
 
-1. Edit transactions.
-2. Remove/reset budgets and navigate budget months.
-3. Rename/delete custom categories with referential-safety rules.
-4. Add search and date filters to Transactions.
-5. Apply period controls consistently where desktop users need them.
-6. Define export, backup, account deletion, and cloud-data deletion.
-7. Replace the boilerplate manifest and add a service worker if PWA support is
+1. Remove/reset budgets and navigate budget months.
+2. Rename/delete custom categories with referential-safety rules.
+3. Add transaction search; date and type filters are implemented.
+4. Apply period controls consistently where desktop users need them.
+5. Define export, backup, account deletion, and cloud-data deletion.
+6. Replace the boilerplate manifest and add a service worker if PWA support is
    promoted into scope.
 
 ## Explicit non-goals
@@ -128,6 +133,6 @@ Tailwind, work directly in this repository, and do not use the Sites skill.
 
 ## Suggested next-session prompt
 
-> Read `AGENTS.md`, `PRD.md`, and `NEXT_STAGE.md`. Implement P0.1 Cloud
-> reliability UX without changing guest persistence, finance calculations, or
-> the Supabase repository contract. Start the app and verify the result.
+> Read `AGENTS.md`, `PRD.md`, and `NEXT_STAGE.md`. Implement budget removal and
+> month navigation without changing guest/cloud separation or integer-IDR
+> semantics. Start the app and verify the result.

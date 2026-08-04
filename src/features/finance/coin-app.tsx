@@ -24,6 +24,8 @@ import {
   LayoutDashboardIcon,
   LogInIcon,
   LogOutIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
   PlusIcon,
   ReceiptTextIcon,
   Settings2Icon,
@@ -76,6 +78,14 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -236,11 +246,11 @@ function getView(pathname: string): CoinView {
 type CoinAppContextValue = ReturnType<typeof useFinance> & {
   openBudget: (categoryId?: string) => void
   openSignIn: () => void
-  openTransaction: () => void
+  openTransaction: (transaction?: FinanceTransaction) => void
 }
 
 type TransactionOverlayContextValue = {
-  openTransaction: () => void
+  openTransaction: (transaction?: FinanceTransaction) => void
 }
 
 const CoinAppContext = createContext<CoinAppContextValue | null>(null)
@@ -273,7 +283,8 @@ function TransactionOverlayProvider({
   categories,
   children,
   onCreateCategory,
-  onSubmit,
+  onAdd,
+  onUpdate,
 }: {
   categories: Category[]
   children: React.ReactNode
@@ -281,10 +292,27 @@ function TransactionOverlayProvider({
     name: string,
     type: FinanceTransaction["type"]
   ) => Promise<Category>
-  onSubmit: ReturnType<typeof useFinance>["addTransaction"]
+  onAdd: ReturnType<typeof useFinance>["addTransaction"]
+  onUpdate: ReturnType<typeof useFinance>["updateTransaction"]
 }) {
   const [open, setOpen] = useState(false)
-  const openTransaction = useCallback(() => setOpen(true), [])
+  const [transaction, setTransaction] = useState<FinanceTransaction>()
+  const openTransaction = useCallback(
+    (nextTransaction?: FinanceTransaction) => {
+      setTransaction(nextTransaction)
+      setOpen(true)
+    },
+    []
+  )
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (!nextOpen) setTransaction(undefined)
+  }, [])
+  const handleSubmit = useCallback(
+    (draft: Parameters<typeof onAdd>[0]) =>
+      transaction ? onUpdate(transaction.id, draft) : onAdd(draft),
+    [onAdd, onUpdate, transaction]
+  )
   const value = useMemo(() => ({ openTransaction }), [openTransaction])
 
   return (
@@ -292,10 +320,11 @@ function TransactionOverlayProvider({
       {children}
       <TransactionDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         categories={categories}
+        transaction={transaction}
         onCreateCategory={onCreateCategory}
-        onSubmit={onSubmit}
+        onSubmit={handleSubmit}
       />
     </TransactionOverlayContext.Provider>
   )
@@ -308,7 +337,8 @@ export function CoinApp() {
     <TransactionOverlayProvider
       categories={finance.categories}
       onCreateCategory={finance.createCategory}
-      onSubmit={finance.addTransaction}
+      onAdd={finance.addTransaction}
+      onUpdate={finance.updateTransaction}
     >
       <CoinAppShell finance={finance} />
     </TransactionOverlayProvider>
@@ -325,6 +355,10 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   const [budgetCategoryId, setBudgetCategoryId] = useState<string>()
   const [signInOpen, setSignInOpen] = useState(false)
   const { openTransaction } = useTransactionOverlay()
+  const openNewTransaction = useCallback(
+    () => openTransaction(),
+    [openTransaction]
+  )
   const appReady = isInteractive && !finance.isLoading
   const openBudget = useCallback((categoryId?: string) => {
     setBudgetCategoryId(categoryId)
@@ -348,7 +382,7 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   return (
     <CoinAppContext.Provider value={contextValue}>
       <SidebarProvider>
-        <CoinSidebar view={view} onAdd={openTransaction} />
+        <CoinSidebar view={view} onAdd={openNewTransaction} />
         <SidebarInset
           data-app-ready={appReady ? "true" : "false"}
           aria-busy={!appReady}
@@ -357,7 +391,7 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
         >
           <AppHeader
             view={view}
-            onAdd={openTransaction}
+            onAdd={openNewTransaction}
             onSignIn={openSignIn}
           />
           <div
@@ -383,7 +417,7 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
           </div>
         </SidebarInset>
 
-        <MobileDock view={view} onAdd={openTransaction} />
+        <MobileDock view={view} onAdd={openNewTransaction} />
         <BudgetDialog
           open={budgetOpen}
           onOpenChange={setBudgetOpen}
@@ -405,7 +439,8 @@ export function OverviewPage() {
       categories={finance.categories}
       transactions={finance.transactions}
       budgets={finance.budgets}
-      onAdd={finance.openTransaction}
+      onAdd={() => finance.openTransaction()}
+      onEdit={finance.openTransaction}
       onBudget={finance.openBudget}
       onDelete={finance.deleteTransaction}
       onClearDemo={finance.clearDemoTransactions}
@@ -420,7 +455,8 @@ export function TransactionsPage() {
     <TransactionsView
       categories={finance.categories}
       transactions={finance.transactions}
-      onAdd={finance.openTransaction}
+      onAdd={() => finance.openTransaction()}
+      onEdit={finance.openTransaction}
       onDelete={finance.deleteTransaction}
       onClearDemo={finance.clearDemoTransactions}
     />
@@ -727,6 +763,7 @@ function DockLink({
 }
 
 type PeriodPreset = "day" | "week" | "month" | "year" | "custom"
+type TransactionPeriod = "all" | PeriodPreset
 
 type DateRange = {
   from: string
@@ -740,6 +777,11 @@ const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "year", label: "This year" },
   { value: "custom", label: "Custom" },
 ]
+
+const transactionPeriodOptions: Array<{
+  value: TransactionPeriod
+  label: string
+}> = [{ value: "all", label: "All dates" }, ...periodOptions]
 
 function dateKey(date: Date) {
   return [
@@ -820,11 +862,13 @@ function OverviewView({
   transactions,
   budgets,
   onAdd,
+  onEdit,
   onBudget,
   onDelete,
   onClearDemo,
 }: FinanceViewProps & {
   onAdd: () => void
+  onEdit: (transaction: FinanceTransaction) => void
   onBudget: () => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
@@ -893,6 +937,7 @@ function OverviewView({
         onPeriodOpenChange={setPeriodOpen}
         onPeriodChange={setPeriod}
         onCustomRangeChange={setCustomRange}
+        onEdit={onEdit}
         onDelete={onDelete}
       />
 
@@ -915,7 +960,13 @@ function OverviewView({
               </CardAction>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold tracking-[-0.04em] tabular-nums sm:text-4xl">
+              <p
+                className={cn(
+                  "text-3xl font-semibold tracking-[-0.04em] tabular-nums sm:text-4xl",
+                  summary.net > 0 && "text-positive",
+                  summary.net < 0 && "text-negative"
+                )}
+              >
                 {formatCompactRupiah(summary.net)}
               </p>
             </CardContent>
@@ -1035,6 +1086,7 @@ function OverviewView({
             <RecentTransactions
               categories={categories}
               transactions={transactions.slice(0, 5)}
+              onEdit={onEdit}
               onDelete={onDelete}
               onClearDemo={onClearDemo}
               compact
@@ -1067,6 +1119,7 @@ function MobileOverview({
   onPeriodOpenChange,
   onPeriodChange,
   onCustomRangeChange,
+  onEdit,
   onDelete,
 }: {
   categories: Category[]
@@ -1081,6 +1134,7 @@ function MobileOverview({
   onPeriodOpenChange: (open: boolean) => void
   onPeriodChange: (period: PeriodPreset) => void
   onCustomRangeChange: (range: DateRange) => void
+  onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
 }) {
   return (
@@ -1108,7 +1162,14 @@ function MobileOverview({
           </CardAction>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-semibold tracking-[-0.045em] tabular-nums">
+          <p
+            data-testid="mobile-net-cash-flow-value"
+            className={cn(
+              "text-3xl font-semibold tracking-[-0.045em] tabular-nums",
+              summary.net > 0 && "text-positive",
+              summary.net < 0 && "text-negative"
+            )}
+          >
             {formatRupiah(summary.net)}
           </p>
         </CardContent>
@@ -1210,9 +1271,9 @@ function MobileOverview({
           <TransactionList
             categories={categories}
             transactions={transactions.slice(0, 4)}
+            onEdit={onEdit}
             onDelete={onDelete}
             compact
-            hideDelete
           />
         </CardContent>
       </Card>
@@ -1438,6 +1499,158 @@ function PeriodDateDialog({
   )
 }
 
+function TransactionDateFilter({
+  open,
+  period,
+  customRange,
+  onOpenChange,
+  onApply,
+}: {
+  open: boolean
+  period: TransactionPeriod
+  customRange: DateRange
+  onOpenChange: (open: boolean) => void
+  onApply: (period: TransactionPeriod, range: DateRange) => void
+}) {
+  const isMobile = useIsMobile()
+  const [draftPeriod, setDraftPeriod] = useState<TransactionPeriod>(period)
+  const [draftRange, setDraftRange] = useState(customRange)
+  const [activeDateField, setActiveDateField] = useState<"from" | "to" | null>(
+    null
+  )
+  const customRangeInvalid =
+    !draftRange.from || !draftRange.to || draftRange.from > draftRange.to
+
+  useEffect(() => {
+    if (!open) return
+    setDraftPeriod(period)
+    setDraftRange(customRange)
+  }, [customRange, open, period])
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setActiveDateField(null)
+    onOpenChange(nextOpen)
+  }
+
+  const controls = (
+    <div className="flex flex-col gap-4 px-4 pb-4">
+      <ToggleGroup
+        type="single"
+        value={draftPeriod}
+        variant="outline"
+        className="grid w-full grid-cols-2"
+        onValueChange={(value) => {
+          if (!value) return
+          const nextPeriod = value as TransactionPeriod
+          setDraftPeriod(nextPeriod)
+
+          if (nextPeriod !== "custom") {
+            onApply(nextPeriod, draftRange)
+            handleOpenChange(false)
+          }
+        }}
+      >
+        {transactionPeriodOptions.map((option) => (
+          <ToggleGroupItem
+            key={option.value}
+            value={option.value}
+            className="w-full last:col-span-2"
+          >
+            {option.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      <Collapsible open={draftPeriod === "custom"}>
+        <CollapsibleContent className="coin-collapsible-content">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+              aria-label={`Filter from date, currently ${formatPeriodDate(draftRange.from)}`}
+              onClick={() => setActiveDateField("from")}
+            >
+              <span className="text-xs font-normal text-muted-foreground">
+                From
+              </span>
+              <span className="w-full truncate text-left font-medium">
+                {formatPeriodDate(draftRange.from)}
+              </span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+              aria-label={`Filter to date, currently ${formatPeriodDate(draftRange.to)}`}
+              onClick={() => setActiveDateField("to")}
+            >
+              <span className="text-xs font-normal text-muted-foreground">
+                To
+              </span>
+              <span className="w-full truncate text-left font-medium">
+                {formatPeriodDate(draftRange.to)}
+              </span>
+            </Button>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {draftPeriod === "custom" && (
+        <Button
+          disabled={customRangeInvalid}
+          onClick={() => {
+            onApply("custom", draftRange)
+            handleOpenChange(false)
+          }}
+        >
+          Apply date range
+        </Button>
+      )}
+
+      <PeriodDateDialog
+        field={activeDateField}
+        customRange={draftRange}
+        onFieldChange={setActiveDateField}
+        onCustomRangeChange={setDraftRange}
+      />
+    </div>
+  )
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={handleOpenChange}>
+        <DrawerContent data-testid="transaction-date-filter">
+          <DrawerHeader>
+            <DrawerTitle>Filter by date</DrawerTitle>
+            <DrawerDescription>
+              Choose the part of your ledger you want to review.
+            </DrawerDescription>
+          </DrawerHeader>
+          {controls}
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        data-testid="transaction-date-filter"
+        className="sm:max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle>Filter by date</DialogTitle>
+          <DialogDescription>
+            Choose the part of your ledger you want to review.
+          </DialogDescription>
+        </DialogHeader>
+        {controls}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function CashFlowSkeleton() {
   return (
     <Skeleton
@@ -1530,26 +1743,59 @@ function TransactionsView({
   categories,
   transactions,
   onAdd,
+  onEdit,
   onDelete,
   onClearDemo,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
   onAdd: () => void
+  onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
 }) {
-  const [filter, setFilter] = useState<"all" | "income" | "expense">("all")
-  const visible = transactions.filter(
-    (transaction) => filter === "all" || transaction.type === filter
+  const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">(
+    "all"
   )
+  const [period, setPeriod] = useState<TransactionPeriod>("all")
+  const [dateFilterOpen, setDateFilterOpen] = useState(false)
+  const initialCustomRange = useMemo(
+    () => getPeriodRange("month", { from: "", to: "" }),
+    []
+  )
+  const [customRange, setCustomRange] = useState(initialCustomRange)
+  const activeRange = useMemo(
+    () => (period === "all" ? undefined : getPeriodRange(period, customRange)),
+    [customRange, period]
+  )
+  const visible = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          (typeFilter === "all" || transaction.type === typeFilter) &&
+          (!activeRange ||
+            (transaction.date >= activeRange.from &&
+              transaction.date <= activeRange.to))
+      ),
+    [activeRange, transactions, typeFilter]
+  )
+  const summary = useMemo(() => summarizeLedger(visible), [visible])
+  const dateLabel =
+    period === "all"
+      ? "All dates"
+      : getPeriodLabel(period, period === "custom" ? customRange : activeRange!)
+  const hasFilters = typeFilter !== "all" || period !== "all"
+  const resetFilters = () => {
+    setTypeFilter("all")
+    setPeriod("all")
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeading
         eyebrow="Unified ledger"
         title="Transactions"
-        description="Every recorded movement, newest first."
+        description="Review, filter, and correct every recorded movement."
         action={
           <Button onClick={onAdd}>
             <PlusIcon data-icon="inline-start" />
@@ -1557,34 +1803,125 @@ function TransactionsView({
           </Button>
         }
       />
+
+      <Card data-testid="transaction-summary">
+        <CardHeader>
+          <CardTitle>{dateLabel}</CardTitle>
+          <CardDescription>
+            {visible.length} {visible.length === 1 ? "entry" : "entries"} in
+            this view.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-3 gap-3">
+          <TransactionSummaryMetric
+            label="Money in"
+            value={summary.income}
+            tone="positive"
+          />
+          <TransactionSummaryMetric
+            label="Money out"
+            value={summary.expenses}
+            tone="negative"
+          />
+          <TransactionSummaryMetric
+            label="Net change"
+            value={summary.net}
+            tone={
+              summary.net > 0
+                ? "positive"
+                : summary.net < 0
+                  ? "negative"
+                  : "neutral"
+            }
+            signed
+          />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
-          <CardTitle>All activity</CardTitle>
+          <CardTitle>Ledger activity</CardTitle>
           <CardDescription>
-            Filter the ledger without separating it into accounts.
+            Grouped by date, with the newest entries first.
           </CardDescription>
-          <CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <ToggleGroup
               type="single"
-              value={filter}
+              value={typeFilter}
               onValueChange={(value) => {
-                if (value) setFilter(value as typeof filter)
+                if (value) setTypeFilter(value as typeof typeFilter)
               }}
               variant="outline"
               size="sm"
+              className="grid w-full grid-cols-3 sm:w-auto"
+              aria-label="Filter transaction type"
             >
-              <ToggleGroupItem value="all">All</ToggleGroupItem>
-              <ToggleGroupItem value="income">Income</ToggleGroupItem>
-              <ToggleGroupItem value="expense">Expense</ToggleGroupItem>
+              <ToggleGroupItem value="all" className="w-full">
+                All
+              </ToggleGroupItem>
+              <ToggleGroupItem value="income" className="w-full">
+                Income
+              </ToggleGroupItem>
+              <ToggleGroupItem value="expense" className="w-full">
+                Expense
+              </ToggleGroupItem>
             </ToggleGroup>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          <TransactionList
-            categories={categories}
-            transactions={visible}
-            onDelete={onDelete}
-          />
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`Filter transaction date, currently ${dateLabel}`}
+              onClick={() => setDateFilterOpen(true)}
+            >
+              <CalendarDaysIcon data-icon="inline-start" />
+              {dateLabel}
+              <ChevronDownIcon data-icon="inline-end" />
+            </Button>
+          </div>
+
+          <Separator />
+
+          {visible.length ? (
+            <TransactionList
+              categories={categories}
+              transactions={visible}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              detailed
+              groupByDate
+            />
+          ) : (
+            <Empty className="min-h-56">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <ReceiptTextIcon />
+                </EmptyMedia>
+                <EmptyTitle>
+                  {transactions.length
+                    ? "No transactions match"
+                    : "No transactions yet"}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {transactions.length
+                    ? "Try a different type or date range."
+                    : "Add your first entry to begin the ledger."}
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                {hasFilters ? (
+                  <Button variant="outline" size="sm" onClick={resetFilters}>
+                    Reset filters
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={onAdd}>
+                    <PlusIcon data-icon="inline-start" />
+                    Add transaction
+                  </Button>
+                )}
+              </EmptyContent>
+            </Empty>
+          )}
         </CardContent>
         {transactions.some((transaction) => transaction.isDemo) && (
           <CardFooter className="justify-between">
@@ -1597,6 +1934,46 @@ function TransactionsView({
           </CardFooter>
         )}
       </Card>
+
+      <TransactionDateFilter
+        open={dateFilterOpen}
+        period={period}
+        customRange={customRange}
+        onOpenChange={setDateFilterOpen}
+        onApply={(nextPeriod, range) => {
+          setPeriod(nextPeriod)
+          if (nextPeriod === "custom") setCustomRange(range)
+        }}
+      />
+    </div>
+  )
+}
+
+function TransactionSummaryMetric({
+  label,
+  value,
+  tone,
+  signed,
+}: {
+  label: string
+  value: number
+  tone: "positive" | "negative" | "neutral"
+  signed?: boolean
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-1 truncate text-sm font-semibold tabular-nums sm:text-base",
+          tone === "positive" && "text-positive",
+          tone === "negative" && "text-negative"
+        )}
+        title={formatRupiah(value)}
+      >
+        {signed && value > 0 ? "+" : ""}
+        {formatCompactRupiah(value)}
+      </p>
     </div>
   )
 }
@@ -1604,12 +1981,14 @@ function TransactionsView({
 function RecentTransactions({
   categories,
   transactions,
+  onEdit,
   onDelete,
   onClearDemo,
   compact,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
+  onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
   compact?: boolean
@@ -1630,6 +2009,7 @@ function RecentTransactions({
         <TransactionList
           categories={categories}
           transactions={compact ? transactions.slice(0, 5) : transactions}
+          onEdit={onEdit}
           onDelete={onDelete}
           compact={compact}
         />
@@ -1649,14 +2029,20 @@ function RecentTransactions({
 function TransactionList({
   categories,
   transactions,
+  onEdit,
   onDelete,
   compact,
+  detailed,
+  groupByDate,
   hideDelete,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
+  onEdit?: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
   compact?: boolean
+  detailed?: boolean
+  groupByDate?: boolean
   hideDelete?: boolean
 }) {
   if (!transactions.length) {
@@ -1674,9 +2060,9 @@ function TransactionList({
     )
   }
 
-  return (
+  const renderRows = (items: FinanceTransaction[]) => (
     <div className={cn("flex flex-col", compact ? "gap-1" : "gap-2")}>
-      {transactions.map((transaction) => {
+      {items.map((transaction) => {
         const category = categories.find(
           (item) => item.id === transaction.categoryId
         )
@@ -1684,6 +2070,7 @@ function TransactionList({
         return (
           <div
             key={transaction.id}
+            data-transaction-row
             className="group flex min-w-0 items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-muted"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary">
@@ -1708,22 +2095,151 @@ function TransactionList({
                 )}
               >
                 {transaction.type === "income" ? "+" : "-"}
-                {formatCompactRupiah(transaction.amount)}
+                {detailed
+                  ? formatRupiah(transaction.amount)
+                  : formatCompactRupiah(transaction.amount)}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {formatTransactionDate(transaction.date)}
-              </p>
+              {!groupByDate && (
+                <p className="text-xs text-muted-foreground">
+                  {formatTransactionDate(transaction.date)}
+                </p>
+              )}
             </div>
-            {!hideDelete && (
+            {!hideDelete && onEdit ? (
+              <TransactionActions
+                transaction={transaction}
+                categoryName={category?.name ?? "Other"}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ) : !hideDelete ? (
               <DeleteTransactionButton
                 transaction={transaction}
                 onDelete={onDelete}
               />
-            )}
+            ) : null}
           </div>
         )
       })}
     </div>
+  )
+
+  if (!groupByDate) return renderRows(transactions)
+
+  const groups = transactions.reduce<
+    Array<{ date: string; items: FinanceTransaction[] }>
+  >((result, transaction) => {
+    const current = result.at(-1)
+    if (current?.date === transaction.date) {
+      current.items.push(transaction)
+    } else {
+      result.push({ date: transaction.date, items: [transaction] })
+    }
+    return result
+  }, [])
+
+  return (
+    <div className="flex flex-col gap-5">
+      {groups.map((group) => {
+        const dailySummary = summarizeLedger(group.items)
+        return (
+          <section key={group.date} className="flex flex-col gap-1.5">
+            <header className="flex items-center justify-between gap-3 px-2">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  {formatTransactionGroupDate(group.date)}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {group.items.length}{" "}
+                  {group.items.length === 1 ? "entry" : "entries"}
+                </p>
+              </div>
+              <p
+                className={cn(
+                  "text-xs font-medium tabular-nums",
+                  dailySummary.net > 0 && "text-positive",
+                  dailySummary.net < 0 && "text-negative",
+                  dailySummary.net === 0 && "text-muted-foreground"
+                )}
+              >
+                Net {dailySummary.net > 0 ? "+" : ""}
+                {formatCompactRupiah(dailySummary.net)}
+              </p>
+            </header>
+            {renderRows(group.items)}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function formatTransactionGroupDate(value: string) {
+  const current = dateKey(new Date())
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  if (value === current) return "Today"
+  if (value === dateKey(yesterday)) return "Yesterday"
+
+  return new Date(`${value}T00:00:00`).toLocaleDateString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
+
+function TransactionActions({
+  transaction,
+  categoryName,
+  onEdit,
+  onDelete,
+}: {
+  transaction: FinanceTransaction
+  categoryName: string
+  onEdit: (transaction: FinanceTransaction) => void
+  onDelete: (id: string) => Promise<void>
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Actions for ${categoryName} transaction`}
+            className="shrink-0"
+          >
+            <MoreHorizontalIcon />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Transaction</DropdownMenuLabel>
+            <DropdownMenuItem onSelect={() => onEdit(transaction)}>
+              <PencilIcon />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => setDeleteOpen(true)}
+            >
+              <Trash2Icon />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DeleteTransactionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        transaction={transaction}
+        onDelete={onDelete}
+      />
+    </>
   )
 }
 
@@ -1735,17 +2251,41 @@ function DeleteTransactionButton({
   onDelete: (id: string) => Promise<void>
 }) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Delete transaction"
-          className="shrink-0 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-        >
-          <Trash2Icon />
-        </Button>
-      </AlertDialogTrigger>
+    <DeleteTransactionDialog
+      transaction={transaction}
+      onDelete={onDelete}
+      trigger={
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Delete transaction"
+            className="shrink-0 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+          >
+            <Trash2Icon />
+          </Button>
+        </AlertDialogTrigger>
+      }
+    />
+  )
+}
+
+function DeleteTransactionDialog({
+  transaction,
+  onDelete,
+  open,
+  onOpenChange,
+  trigger,
+}: {
+  transaction: FinanceTransaction
+  onDelete: (id: string) => Promise<void>
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  trigger?: React.ReactNode
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {trigger}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogMedia>

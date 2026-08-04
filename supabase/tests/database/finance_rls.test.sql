@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(30);
+select plan(32);
 
 create temporary table test_results (
   result text not null
@@ -74,8 +74,8 @@ insert into test_results (result) select ok(
 insert into test_results (result) select ok(
   has_table_privilege('authenticated', 'public.transactions', 'select')
   and has_table_privilege('authenticated', 'public.transactions', 'insert')
-  and has_table_privilege('authenticated', 'public.transactions', 'delete')
-  and not has_table_privilege('authenticated', 'public.transactions', 'update'),
+  and has_table_privilege('authenticated', 'public.transactions', 'update')
+  and has_table_privilege('authenticated', 'public.transactions', 'delete'),
   'Authenticated transaction privileges are least-privilege'
 );
 insert into test_results (result) select ok(
@@ -209,6 +209,28 @@ insert into test_results (result) select is(
   0::bigint,
   'User A cannot delete User B transactions'
 );
+with own_update as (
+  update public.transactions
+  set amount = 15000
+  where user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  returning id
+)
+insert into test_results (result) select is(
+  (select count(*) from own_update),
+  1::bigint,
+  'User A can update their own transaction'
+);
+with attempted_transaction_update as (
+  update public.transactions
+  set amount = 1
+  where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  returning id
+)
+insert into test_results (result) select is(
+  (select count(*) from attempted_transaction_update),
+  0::bigint,
+  'User A cannot update User B transactions'
+);
 with attempted_update as (
   update public.budgets
   set amount = 1
@@ -317,9 +339,10 @@ insert into test_results (result) select is(
     select count(*)
     from public.transactions
     where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      and amount = 20000
   ),
   1::bigint,
-  'User B still reads their transaction after User A mutation attempts'
+  'User B transaction was not changed by User A mutation attempts'
 );
 insert into test_results (result) select is(
   (

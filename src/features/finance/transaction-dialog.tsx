@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react"
 import type { FormEvent } from "react"
-import { ArrowDownLeftIcon, ArrowUpRightIcon, PlusIcon } from "lucide-react"
+import {
+  ArrowDownLeftIcon,
+  ArrowUpRightIcon,
+  CheckIcon,
+  PlusIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -41,6 +46,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   Category,
+  FinanceTransaction,
   NewTransaction,
   TransactionType,
 } from "@/domain/finance"
@@ -79,6 +85,7 @@ type TransactionDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   categories: Category[]
+  transaction?: FinanceTransaction
   onCreateCategory: (name: string, type: TransactionType) => Promise<Category>
   onSubmit: (transaction: NewTransaction) => Promise<void>
 }
@@ -87,6 +94,7 @@ export function TransactionDialog({
   open,
   onOpenChange,
   categories,
+  transaction,
   onCreateCategory,
   onSubmit,
 }: TransactionDialogProps) {
@@ -116,15 +124,18 @@ export function TransactionDialog({
 
   useEffect(() => {
     if (!open) return
-    setType("expense")
-    setAmount("")
-    setCategoryId(preferredCategoryId(categories, "expense"))
+    const initialType = transaction?.type ?? "expense"
+    setType(initialType)
+    setAmount(transaction ? String(transaction.amount) : "")
+    setCategoryId(
+      transaction?.categoryId ?? preferredCategoryId(categories, initialType)
+    )
     setCustomCategory("")
-    setDate(today())
-    setNote("")
-    setShowDetails(false)
+    setDate(transaction?.date ?? today())
+    setNote(transaction?.note ?? "")
+    setShowDetails(Boolean(transaction))
     setSubmitted(false)
-  }, [categories, open])
+  }, [categories, open, transaction])
 
   function reset() {
     setType("expense")
@@ -169,8 +180,10 @@ export function TransactionDialog({
         date,
         note: note.trim(),
       })
-      toast.success("Transaction added", {
-        description: "Your ledger has been updated.",
+      toast.success(transaction ? "Transaction updated" : "Transaction added", {
+        description: transaction
+          ? "Your changes are reflected across the ledger."
+          : "Your ledger has been updated.",
       })
       reset()
       onOpenChange(false)
@@ -497,16 +510,28 @@ export function TransactionDialog({
           className="data-[vaul-drawer-direction=bottom]:max-h-[78svh]"
         >
           <DrawerHeader>
-            <DrawerTitle>Add transaction</DrawerTitle>
+            <DrawerTitle>
+              {transaction ? "Edit transaction" : "Add transaction"}
+            </DrawerTitle>
             <DrawerDescription>
-              Amount and category are all you need.
+              {transaction
+                ? "Update the details for this ledger entry."
+                : "Amount and category are all you need."}
             </DrawerDescription>
           </DrawerHeader>
           {form}
           <DrawerFooter className="border-t">
             <Button type="submit" form={formId} disabled={saving}>
-              <PlusIcon data-icon="inline-start" />
-              {saving ? "Saving..." : "Save transaction"}
+              {transaction ? (
+                <CheckIcon data-icon="inline-start" />
+              ) : (
+                <PlusIcon data-icon="inline-start" />
+              )}
+              {saving
+                ? "Saving..."
+                : transaction
+                  ? "Save changes"
+                  : "Save transaction"}
             </Button>
           </DrawerFooter>
         </DrawerContent>
@@ -518,9 +543,13 @@ export function TransactionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add a transaction</DialogTitle>
+          <DialogTitle>
+            {transaction ? "Edit transaction" : "Add a transaction"}
+          </DialogTitle>
           <DialogDescription>
-            Record money moving in or out of the unified ledger.
+            {transaction
+              ? "Update this entry without changing its place in the ledger."
+              : "Record money moving in or out of the unified ledger."}
           </DialogDescription>
         </DialogHeader>
         {form}
@@ -531,8 +560,16 @@ export function TransactionDialog({
             </Button>
           </DialogClose>
           <Button type="submit" form={formId} disabled={saving}>
-            <PlusIcon data-icon="inline-start" />
-            {saving ? "Saving..." : "Add transaction"}
+            {transaction ? (
+              <CheckIcon data-icon="inline-start" />
+            ) : (
+              <PlusIcon data-icon="inline-start" />
+            )}
+            {saving
+              ? "Saving..."
+              : transaction
+                ? "Save changes"
+                : "Add transaction"}
           </Button>
         </DialogFooter>
       </DialogContent>

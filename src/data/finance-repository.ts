@@ -118,6 +118,16 @@ export async function deleteTransaction(id: string) {
   await db.transactions.delete(id)
 }
 
+export async function updateTransaction(
+  id: string,
+  transaction: NewTransaction
+) {
+  const db = getFinanceDatabase()
+  if (!db) throw new Error("Local storage is unavailable.")
+  const updated = await db.transactions.update(id, transaction)
+  if (!updated) throw new Error("Transaction was not found.")
+}
+
 export async function createCategory(name: string, type: TransactionType) {
   const db = getFinanceDatabase()
   if (!db) throw new Error("Local storage is unavailable.")
@@ -158,6 +168,7 @@ export const localFinanceRepository: FinanceRepository = {
     budgets: await listBudgets(),
   }),
   addTransaction,
+  updateTransaction,
   deleteTransaction,
   createCategory,
   saveBudget,

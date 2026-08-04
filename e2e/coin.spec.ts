@@ -158,6 +158,7 @@ test("starts a first-time guest with an empty ledger", async ({ page }) => {
 test("records and persists a transaction from the desktop dashboard", async ({
   page,
 }) => {
+  await page.clock.setFixedTime(new Date("2026-07-25T12:00:00+07:00"))
   await page.goto("/")
   await page.locator('[data-app-ready="true"]').waitFor()
 
@@ -185,11 +186,53 @@ test("records and persists a transaction from the desktop dashboard", async ({
   ).toBeVisible()
   await expect(page.getByText("Example data")).toHaveCount(0)
 
+  await page.getByTestId("add-transaction-desktop").click()
+  await page.getByLabel("Amount in IDR").fill("250000")
+  await page.getByLabel("Category").click()
+  await page.getByRole("option", { name: "Food & dining" }).click()
+  await page.getByLabel("Date").fill("2026-06-15")
+  await page.getByLabel("Note").fill("Older groceries")
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Add transaction" })
+    .click()
+
+  await page.goto("/transactions")
+  await page.locator('[data-app-ready="true"]').waitFor()
+  await expect(page.getByTestId("transaction-summary")).toContainText(
+    "2 entries"
+  )
+
+  await page
+    .getByRole("button", {
+      name: "Filter transaction date, currently All dates",
+    })
+    .click()
+  const dateFilter = page.getByTestId("transaction-date-filter")
+  await expect(dateFilter).toBeVisible()
+  await dateFilter.getByRole("radio", { name: "This month" }).click()
+  await expect(page.getByText("Fresh groceries")).toBeVisible()
+  await expect(page.getByText("Older groceries")).toHaveCount(0)
+  await expect(page.getByTestId("transaction-summary")).toContainText("1 entry")
+
+  const transactionRow = page
+    .locator("[data-transaction-row]")
+    .filter({ hasText: "Fresh groceries" })
+  await transactionRow.getByRole("button", { name: /Actions for/ }).click()
+  await page.getByRole("menuitem", { name: "Edit" }).click()
+  const editDialog = page.getByRole("dialog", { name: "Edit transaction" })
+  await expect(editDialog).toBeVisible()
+  await expect(page.getByLabel("Amount in IDR")).toHaveValue("1.500.000")
+  await page.getByLabel("Amount in IDR").fill("1600000")
+  await page.getByLabel("Note").fill("Fresh groceries updated")
+  await editDialog.getByRole("button", { name: "Save changes" }).click()
+  await expect(page.getByText("Transaction updated")).toBeVisible()
+  await expect(page.getByText("Fresh groceries updated")).toBeVisible()
+
   await page.reload()
   await page.locator('[data-app-ready="true"]').waitFor()
-  await expect(
-    page.getByTestId("desktop-overview").getByText("Fresh groceries")
-  ).toBeVisible()
+  await expect(page.getByText("Fresh groceries updated")).toBeVisible()
+  await expect(page.getByText("Older groceries")).toBeVisible()
 })
 
 test("uses a bottom dock and transaction drawer on mobile", async ({
@@ -313,6 +356,43 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await expect(
     page.getByTestId("mobile-recent-activity").getByText(/^-Rp/)
   ).toHaveClass(/text-negative/)
+  await expect(page.getByTestId("mobile-net-cash-flow-value")).toHaveClass(
+    /text-negative/
+  )
+
+  await page
+    .getByTestId("mobile-recent-activity")
+    .getByRole("button", {
+      name: "Actions for Food & dining transaction",
+    })
+    .click()
+  await page.getByRole("menuitem", { name: "Edit" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Edit transaction" })
+  ).toBeVisible()
+  await page.getByLabel("Amount").fill("150000")
+  await page.getByRole("button", { name: "Save changes" }).click()
+  await expect(page.getByText("Transaction updated")).toBeVisible()
+  await expect(
+    page.getByTestId("mobile-recent-activity").getByText("-Rp 150 rb")
+  ).toBeVisible()
+
+  await page
+    .getByTestId("mobile-recent-activity")
+    .getByRole("button", {
+      name: "Actions for Food & dining transaction",
+    })
+    .click()
+  await page.getByRole("menuitem", { name: "Delete" }).click()
+  const deleteDialog = page.getByRole("alertdialog")
+  await expect(
+    deleteDialog.getByRole("heading", { name: "Delete this transaction?" })
+  ).toBeVisible()
+  await deleteDialog.getByRole("button", { name: "Delete" }).click()
+  await expect(page.getByText("Transaction deleted")).toBeVisible()
+  await expect(
+    page.getByTestId("mobile-recent-activity").getByText("No transactions here")
+  ).toBeVisible()
 
   await page.getByRole("link", { name: "Budgets" }).click()
   await expect(page).toHaveURL(/\/budgets$/)
