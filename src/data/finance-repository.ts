@@ -60,83 +60,6 @@ const builtInCategories: Category[] = [
   { id: "leisure", name: "Leisure", type: "expense", isCustom: false },
 ]
 
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10)
-}
-
-function offsetDate(monthOffset: number, day: number) {
-  const now = new Date()
-  return toDateInput(
-    new Date(now.getFullYear(), now.getMonth() + monthOffset, day)
-  )
-}
-
-function demoTransactions(): FinanceTransaction[] {
-  const now = Date.now()
-  return [
-    {
-      id: "demo-salary-current",
-      type: "income",
-      amount: 12_500_000,
-      categoryId: "salary",
-      date: offsetDate(0, 1),
-      note: "Monthly salary",
-      createdAt: now - 6,
-      isDemo: true,
-    },
-    {
-      id: "demo-housing-current",
-      type: "expense",
-      amount: 3_200_000,
-      categoryId: "housing",
-      date: offsetDate(0, 3),
-      note: "Rent",
-      createdAt: now - 5,
-      isDemo: true,
-    },
-    {
-      id: "demo-food-current",
-      type: "expense",
-      amount: 680_000,
-      categoryId: "food",
-      date: offsetDate(0, 8),
-      note: "Groceries and lunch",
-      createdAt: now - 4,
-      isDemo: true,
-    },
-    {
-      id: "demo-transport-current",
-      type: "expense",
-      amount: 275_000,
-      categoryId: "transport",
-      date: offsetDate(0, 12),
-      note: "Commuting",
-      createdAt: now - 3,
-      isDemo: true,
-    },
-    {
-      id: "demo-income-previous",
-      type: "income",
-      amount: 11_800_000,
-      categoryId: "salary",
-      date: offsetDate(-1, 1),
-      note: "Monthly salary",
-      createdAt: now - 2,
-      isDemo: true,
-    },
-    {
-      id: "demo-expense-previous",
-      type: "expense",
-      amount: 4_860_000,
-      categoryId: "shopping",
-      date: offsetDate(-1, 16),
-      note: "Monthly expenses",
-      createdAt: now - 1,
-      isDemo: true,
-    },
-  ]
-}
-
 function makeId(prefix: string) {
   return `${prefix}-${globalThis.crypto.randomUUID()}`
 }
@@ -145,7 +68,7 @@ export async function ensureFinanceSeed() {
   const db = getFinanceDatabase()
   if (!db) return
   const seeded = await db.settings.get("seeded")
-  if (seeded) return
+  if (seeded?.value === "2") return
 
   await db.transaction(
     "rw",
@@ -154,8 +77,8 @@ export async function ensureFinanceSeed() {
     db.settings,
     async () => {
       await db.categories.bulkPut(builtInCategories)
-      await db.transactions.bulkPut(demoTransactions())
-      await db.settings.put({ key: "seeded", value: "1" })
+      await db.transactions.filter((item) => item.isDemo === true).delete()
+      await db.settings.put({ key: "seeded", value: "2" })
     }
   )
 }

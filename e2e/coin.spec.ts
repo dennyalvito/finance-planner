@@ -13,6 +13,14 @@ test("keeps chart tooltips stable for display labels outside the chart config", 
   const cashFlowChart = desktopOverview.getByTestId("cash-flow-chart")
   const spendingChart = desktopOverview.getByTestId("spending-chart")
 
+  await page.getByTestId("add-transaction-desktop").click()
+  await page.getByLabel("Amount in IDR").fill("125000")
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Add transaction" })
+    .click()
+
+  await expect(spendingChart).toBeVisible()
   await cashFlowChart.hover({ position: { x: 240, y: 130 } })
   await spendingChart.hover({ position: { x: 88, y: 30 } })
 
@@ -41,7 +49,9 @@ test("shows selective chart skeletons before mounting overview charts", async ({
 
   await expect(page).toHaveURL(/\/$/)
   await expect(desktopOverview.getByTestId("cash-flow-chart")).toBeVisible()
-  await expect(desktopOverview.getByTestId("spending-chart")).toBeVisible()
+  await expect(
+    desktopOverview.getByText("No expense data yet", { exact: true })
+  ).toBeVisible()
   await expect(cashFlowSkeleton).toHaveCount(0)
   await expect(spendingSkeleton).toHaveCount(0)
 })
@@ -122,6 +132,27 @@ test("collapses the desktop sidebar to icons and keeps the chart card content-si
     page.locator('[data-slot="sidebar"][data-state="collapsed"]')
   ).toBeVisible()
   expect(pageErrors).toEqual([])
+})
+
+test("starts a first-time guest with an empty ledger", async ({ page }) => {
+  await page.goto("/")
+  await page.locator('[data-app-ready="true"]').waitFor()
+
+  const desktopOverview = page.getByTestId("desktop-overview")
+
+  await expect(
+    desktopOverview.getByText("No transactions here", { exact: true })
+  ).toBeVisible()
+  await expect(desktopOverview.getByText("Example data")).toHaveCount(0)
+  await expect(
+    desktopOverview.getByText("No expense data yet", { exact: true })
+  ).toBeVisible()
+
+  await page.getByTestId("add-transaction-desktop").click()
+  await page.getByLabel("Category").click()
+  await expect(
+    page.getByRole("option", { name: "Food & dining" })
+  ).toBeVisible()
 })
 
 test("records and persists a transaction from the desktop dashboard", async ({

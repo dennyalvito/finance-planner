@@ -2,7 +2,7 @@
 
 Status: Reliability implemented; authenticated verification execution pending
 
-Baseline date: 2026-07-30
+Baseline date: 2026-08-02
 
 ## Purpose
 
@@ -29,6 +29,9 @@ ordered execution handoff.
   focuses the amount field, and formats IDR thousands while typing.
 - Guest mode uses Dexie/IndexedDB. Account mode uses Supabase Postgres. The
   repository boundary keeps finance UI independent of storage.
+- A first-time guest starts with an empty ledger. Built-in categories are
+  initialized locally, and legacy demo rows are removed without affecting real
+  guest transactions.
 - Google-only login uses Supabase `signInWithOAuth`. There is no Google iframe,
   Google SDK loader, FedCM integration, direct ID-token exchange, or
   `VITE_GOOGLE_CLIENT_ID`.
@@ -78,9 +81,9 @@ execution:
 ### P0.3 — Explicit guest import
 
 Offer import from Settings after sign-in; do not interrupt the first successful
-login. Show a preview, exclude demo rows, require confirmation, preserve local
-data, and make retries idempotent. If cloud data already exists, do not merge
-until the remaining merge-policy decision is resolved.
+login. Show a preview, exclude any legacy demo rows, require confirmation,
+preserve local data, and make retries idempotent. If cloud data already exists,
+do not merge until the remaining merge-policy decision is resolved.
 
 ### P0.4 — Production OAuth and deployment
 
