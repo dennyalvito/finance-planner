@@ -2,7 +2,7 @@
 
 Status: Reliability implemented; authenticated verification execution pending
 
-Baseline date: 2026-08-02
+Baseline date: 2026-08-04
 
 ## Purpose
 
@@ -20,13 +20,16 @@ ordered execution handoff.
   bottom drawers for quick transaction and budget entry.
 - The ledger starts at zero and reports net cash flow. Amounts are integer IDR.
   Coin does not model bank balances or separate accounts.
-- Mobile overview shows period-scoped net cash flow, income, expenses,
-  category cash flow, and recent activity. Presets and a shadcn range calendar
-  support today, week, month, year, and custom periods.
+- Mobile overview defaults to Today's net cash flow and shows period-scoped
+  income, expenses, category cash flow, and recent activity. Presets support
+  today, week, month, year, and custom periods. Custom From and To fields open
+  compact shadcn calendar dialogs with direct month and year selectors.
 - Desktop overview shows all-time summary cards, a six-month cash-flow chart,
   expense distribution, current-month budget pulse, and recent transactions.
 - Transaction entry defaults to expense and the first matching category,
-  focuses the amount field, and formats IDR thousands while typing.
+  focuses a visually emphasized amount field, and formats IDR thousands while
+  typing. Expense amounts use the semantic negative color in recent lists.
+- Period, transaction, and budget drawers use the same overlay treatment.
 - Guest mode uses Dexie/IndexedDB. Account mode uses Supabase Postgres. The
   repository boundary keeps finance UI independent of storage.
 - A first-time guest starts with an empty ledger. Built-in categories are
@@ -43,7 +46,7 @@ ordered execution handoff.
 
 ## Verified baseline
 
-TypeScript, ESLint, the production build, 19 unit/component tests, and all 6
+TypeScript, ESLint, the production build, 19 unit/component tests, and all 7
 Playwright guest/browser tests pass. The authenticated browser workflow is
 implemented and skips without dedicated test credentials. The 30-assertion
 pgTAP suite is available as an optional manual security check, but it still
