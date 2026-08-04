@@ -2,7 +2,7 @@
 
 Status: Core MVP and account reliability implemented; import decision pending
 
-Last updated: 2026-07-30
+Last updated: 2026-08-02
 
 Execution handoff: [NEXT_STAGE.md](./NEXT_STAGE.md)
 
@@ -53,7 +53,7 @@ complete, first-class experience.
 - Storage-mode indicators in navigation, profile, and settings
 - Cloud loading, empty, offline, failed-load, failed-mutation, and retry UX
 - Transactional RLS tests and an authenticated browser verification workflow
-- Seeded example transactions that are removed when real data is added
+- Empty first-visit guest ledger with built-in transaction categories
 - Unit tests for finance calculations
 - Playwright coverage for critical guest workflows
 
@@ -148,7 +148,7 @@ data, Coin should present an explicit choice:
 
 Recommended behavior:
 
-- Never import seeded example transactions.
+- Never import legacy seeded example transactions.
 - Import in one database transaction or an idempotent server operation.
 - Preserve local guest data after a successful import until the user separately
   chooses to remove it.
@@ -195,7 +195,7 @@ The contract should cover:
 - Adding and deleting a transaction
 - Creating a custom category
 - Saving a monthly category budget
-- Clearing guest example transactions where supported
+- Clearing legacy guest example transactions where supported
 - Refreshing or subscribing to repository changes
 
 Two adapters implement that contract:
