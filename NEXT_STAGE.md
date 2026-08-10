@@ -1,8 +1,8 @@
 # Coin Next-Stage Handoff
 
-Status: Reliability implemented; authenticated verification execution pending
+Status: Finance CRUD and authenticated offline sync implemented; deployment migration pending
 
-Baseline date: 2026-08-08
+Baseline date: 2026-08-10
 
 ## Purpose
 
@@ -34,7 +34,8 @@ ordered execution handoff.
   type and preset/custom date filters, and keeps Edit/Delete in a row menu.
   Compact recent-activity rows on Home expose the same Edit/Delete action menu.
 - Period, transaction, and budget drawers use the same overlay treatment.
-- Guest mode uses Dexie/IndexedDB. Account mode uses Supabase Postgres. The
+- Guest mode uses Dexie/IndexedDB. Account mode uses a separate user-scoped
+  Dexie cache/outbox with Supabase Postgres as the system of record. The
   repository boundary keeps finance UI independent of storage.
 - A first-time guest starts with an empty ledger. Built-in categories are
   initialized locally, and legacy demo rows are removed without affecting real
@@ -47,6 +48,18 @@ ordered execution handoff.
   transaction updates.
 - Custom category creation is account-only by current product decision. Guests
   use the built-in category templates.
+- Account-owned custom categories can be renamed and deleted. Their stable ID
+  and type are immutable, and deletion is blocked while a transaction or budget
+  uses the category.
+- Current-month budgets can be created, adjusted, and removed without changing
+  any transactions.
+- Returning account users can perform transaction, category, and budget CRUD
+  offline. Pending changes are compacted in IndexedDB and synchronize when Coin
+  is open online.
+- Same-record multi-device collisions require an explicit cloud/device choice.
+  Distinct records merge, and edit-versus-delete scenarios preserve both choices.
+- Signing out with pending changes shows a destructive warning with sync, stay,
+  and explicit discard choices.
 - Animations are CSS-based. GSAP is not part of the project.
 - Coin is installable as a PWA with branded platform icons and a precached app
   shell. The service worker uses browser-managed update checks with no polling,
@@ -54,10 +67,10 @@ ordered execution handoff.
 
 ## Verified baseline
 
-TypeScript, ESLint, the production build, 19 unit/component tests, and all 7
+TypeScript, ESLint, the production build, 29 unit/component tests, and all 7
 Playwright guest/browser tests pass. The authenticated browser workflow is
 implemented and skips without dedicated test credentials. The pgTAP suite now
-contains 32 assertions and is available as an optional manual
+contains 41 assertions and is available as an optional manual
 security check, but it still needs execution in an environment with a running
 local Supabase stack.
 Automated tests do not complete a real Google account login.
@@ -106,16 +119,16 @@ domain before public launch.
 
 ## Product improvements after P0
 
-1. Remove/reset budgets and navigate budget months.
-2. Rename/delete custom categories with referential-safety rules.
-3. Add transaction search; date and type filters are implemented.
-4. Apply period controls consistently where desktop users need them.
-5. Define export, backup, account deletion, and cloud-data deletion.
+1. Navigate and review historical budget months.
+2. Add transaction search; date and type filters are implemented.
+3. Apply period controls consistently where desktop users need them.
+4. Define export, backup, account deletion, cloud-data deletion, and tombstone
+   retention.
 
 ## Explicit non-goals
 
 Do not add bank connections, account balances, multi-currency conversion,
-shared workspaces, email/password auth, Realtime, or general signed-in offline
+shared workspaces, email/password auth, Realtime, or service-worker background
 sync unless the PRD is intentionally revised. Continue using shadcn and
 Tailwind, work directly in this repository, and do not use the Sites skill.
 
@@ -129,6 +142,11 @@ Tailwind, work directly in this repository, and do not use the Sites skill.
 - `src/data/finance-repository.types.ts` — storage contract
 - `src/data/finance-repository.ts` — Dexie adapter
 - `src/data/supabase-finance-repository.ts` — Supabase adapter
+- `src/data/account-finance-store.ts` — authenticated device cache and outbox
+- `src/data/supabase-finance-sync.ts` — ordered cloud synchronization and
+  conflict detection
+- `src/features/finance/sync-status.tsx` — pending and conflict UX
+- `src/features/auth/guarded-sign-out-dialog.tsx` — pending-change sign-out guard
 - `src/features/auth/auth-provider.tsx` — session and OAuth entry point
 - `src/features/finance/coin-app.tsx` — application shell and route views
 - `supabase/migrations/` — schema, grants, constraints, and RLS
@@ -136,6 +154,7 @@ Tailwind, work directly in this repository, and do not use the Sites skill.
 
 ## Suggested next-session prompt
 
-> Read `AGENTS.md`, `PRD.md`, and `NEXT_STAGE.md`. Implement budget removal and
-> month navigation without changing guest/cloud separation or integer-IDR
-> semantics. Start the app and verify the result.
+> Read `AGENTS.md`, `PRD.md`, and `NEXT_STAGE.md`. Apply and verify the pending
+> offline-sync migration in the target Supabase environment, then implement
+> historical budget-month navigation without changing guest/cloud separation or
+> integer-IDR semantics. Start the app and verify the result.

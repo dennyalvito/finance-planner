@@ -1,8 +1,8 @@
 # Coin Product Requirements Document
 
-Status: Core MVP and account reliability implemented; import decision pending
+Status: Core MVP, complete finance CRUD, and authenticated offline sync implemented
 
-Last updated: 2026-08-08
+Last updated: 2026-08-10
 
 Execution handoff: [NEXT_STAGE.md](./NEXT_STAGE.md)
 
@@ -46,7 +46,9 @@ complete, first-class experience.
   both guest and account workspaces
 - Transaction deletion
 - Built-in categories for guests and account-owned custom categories
-- Monthly category budgets
+- Rename and guarded deletion for account-owned custom categories; category
+  type and stable ID remain immutable, and categories in use cannot be deleted
+- Monthly category budgets with create, adjust, and remove actions
 - Recorded income, expenses, net movement, and savings-rate calculations
 - Cash-flow and category-spending charts
 - Mobile period filtering defaults to Today, with presets and separate From/To
@@ -56,13 +58,19 @@ complete, first-class experience.
 - Semantic negative styling for expense amounts in transaction activity
 - A visually emphasized amount field in mobile transaction entry
 - Dexie/IndexedDB persistence
-- Google-only Supabase OAuth and account-mode cloud persistence
+- Google-only Supabase OAuth and account-mode cloud persistence backed by a
+  per-user IndexedDB cache and pending-sync outbox
 - Storage-mode indicators in navigation, profile, and settings
 - Cloud loading, empty, offline, failed-load, failed-mutation, and retry UX
 - Transactional RLS tests and an authenticated browser verification workflow
 - Empty first-visit guest ledger with built-in transaction categories
 - Installable PWA metadata, platform icons, and a service worker that precaches
-  the local app shell for offline guest access
+  the local app shell
+- Signed-in offline CRUD for transactions, custom categories, and budgets after
+  the account has been loaded once on that device
+- Per-record multi-device conflict detection with explicit cloud/device choices,
+  including edit-versus-delete conflicts
+- A destructive sign-out warning when changes are still pending on the device
 - Unit tests for finance calculations
 - Playwright coverage for critical guest workflows
 
@@ -70,13 +78,15 @@ complete, first-class experience.
 
 - Guest data is available only in the browser profile where it was created.
 - Clearing site data removes the guest ledger.
-- Account mode is online-required in the first release.
+- A signed-in account must be loaded online once before that account can be used
+  offline on a new device or cleared browser profile.
 - There is no guest-to-account import flow yet.
 - The authenticated browser workflow needs dedicated test credentials to run.
 - The local RLS suite needs Docker and a running local Supabase stack.
 - Real Google identity continuity remains a manual verification.
-- Budget removal and category rename/delete are absent.
-- Realtime synchronization and signed-in offline writes are deferred.
+- Account synchronization runs only while Coin is open or reopened online;
+  there is no service-worker background sync or Realtime subscription.
+- Logical deletion tombstones do not yet have a server-side retention cleanup.
 
 ## 4. Goals for the backend stage
 
@@ -107,8 +117,8 @@ complete, first-class experience.
 - Bank connections or automatic transaction ingestion
 - Multi-currency support
 - Shared, household, or organization workspaces
-- Full offline synchronization for signed-in users
-- Conflict resolution across devices
+- Service-worker background synchronization while Coin is closed
+- Automatic conflict resolution that silently overwrites either device
 - Realtime subscriptions
 - Automatic background migration of guest data
 - A custom application server when Supabase Auth, Postgres, Data API, and Row
@@ -128,9 +138,11 @@ complete, first-class experience.
 ### Account mode
 
 - Authentication: Supabase Auth
-- Data store: Supabase Postgres through the user-scoped Supabase client
+- System of record: Supabase Postgres through the user-scoped Supabase client
+- Device cache and outbox: a user-scoped Dexie/IndexedDB database
 - Scope: the authenticated user
-- Network requirement for the first release: required for reads and writes
+- Network requirement: required for the first load on a device and for cloud
+  synchronization; cached finance CRUD remains available offline afterward
 - Authorization: PostgreSQL Row Level Security
 
 ### Switching modes
@@ -142,7 +154,9 @@ complete, first-class experience.
 - Coin must show a storage indicator such as `On this device` or `Cloud
 workspace` to prevent confusion.
 
-This is a dual-workspace model, not automatic bidirectional synchronization.
+This remains a dual-workspace model: guest records are never synchronized into
+the account workspace automatically. Account records do synchronize between the
+per-user device cache and that user's Supabase workspace.
 
 ## 7. First-login and guest-data strategy
 
@@ -201,21 +215,22 @@ The contract should cover:
 
 - Listing transactions, categories, and budgets
 - Adding, updating, and deleting a transaction
-- Creating a custom category
-- Saving a monthly category budget
+- Creating, renaming, and deleting a custom category
+- Saving and deleting a monthly category budget
 - Clearing legacy guest example transactions where supported
 - Refreshing or subscribing to repository changes
 
-Two adapters implement that contract:
+The guest and account paths implement that contract:
 
 - `DexieFinanceRepository` for guest mode
-- `SupabaseFinanceRepository` for account mode
+- A local-first account repository backed by user-scoped Dexie, with a Supabase
+  synchronization adapter for account mode
 
 An auth/session layer selects the active adapter:
 
 ```text
 No authenticated user -> DexieFinanceRepository
-Authenticated user    -> SupabaseFinanceRepository
+Authenticated user    -> AccountFinanceRepository + SupabaseFinanceSync
 ```
 
 Domain calculations remain in `src/domain` and are shared by both modes.
@@ -233,6 +248,9 @@ The initial schema should contain three finance tables. All timestamps use UTC.
 - `type`: `income` or `expense`
 - `is_custom`: boolean
 - `created_at`: timestamptz
+- `updated_at`: timestamptz
+- `revision`: positive bigint used for optimistic conflict detection
+- `deleted_at`: nullable tombstone timestamp
 
 Built-in categories use the existing stable text identifiers, such as `salary`
 and `food`, with `user_id = null`, and are readable by every authenticated
@@ -250,6 +268,9 @@ integrity.
 - `date`: date
 - `note`: text
 - `created_at`: timestamptz
+- `updated_at`: timestamptz
+- `revision`: positive bigint used for optimistic conflict detection
+- `deleted_at`: nullable tombstone timestamp
 
 The application must only convert `amount` to a JavaScript number after
 ensuring it is within JavaScript's safe integer range.
@@ -262,6 +283,8 @@ ensuring it is within JavaScript's safe integer range.
 - `month`: date normalized to the first day of the month
 - `amount`: bigint with `amount > 0`
 - `updated_at`: timestamptz
+- `revision`: positive bigint used for optimistic conflict detection
+- `deleted_at`: nullable tombstone timestamp
 - Unique constraint on `(user_id, month, category_id)`
 
 The unique constraint makes budget saving an upsert instead of creating
@@ -270,14 +293,19 @@ duplicates.
 ### Database invariants
 
 - Finance tables have Row Level Security enabled.
-- Authenticated users can select, insert, update, and delete only rows where
-  `user_id = auth.uid()`.
+- Authenticated users can select, insert, and update only rows whose `user_id`
+  matches `auth.uid()`; browser-facing deletion is a guarded logical update.
 - Anonymous API requests cannot access private finance rows.
 - Custom category writes require `user_id = auth.uid()`.
 - Built-in categories are readable but cannot be changed by application users.
 - Ownership columns are indexed.
 - Transaction dates and category/type compatibility are validated by the
   repository and, where practical, by database constraints or triggers.
+- Category identity and type are immutable after creation.
+- A category cannot be tombstoned while an active transaction or budget refers
+  to it.
+- Every update advances the record revision so stale offline writes are
+  detected instead of silently overwriting another device.
 
 ## 10. Authentication strategy
 
@@ -406,7 +434,7 @@ Phase 5 verification work.
 
 ### Repository contract tests
 
-Both repositories should satisfy the same behavioral contract for:
+Both guest and account repositories should satisfy the same behavioral contract for:
 
 - Transaction creation, update, and deletion
 - Category creation
@@ -455,11 +483,14 @@ Both repositories should satisfy the same behavioral contract for:
 
 - Host the application on Vercel while keeping the Supabase project independently owned.
 - Keep guest mode entirely on Dexie.
-- Make account mode cloud-first and online-required at first.
+- Keep Supabase as the account system of record, with a per-user device cache
+  and compact client-side outbox for offline CRUD.
 - Use Google OAuth only; do not offer email-based signup.
 - Keep guest and account workspaces separate until an explicit import phase.
 - Offer import from Settings after sign-in rather than interrupting the first successful login.
 - Use migrations, least-privilege grants, and Row Level Security from the first database change.
 - Ship installable PWA support with a lean browser-managed update lifecycle;
-  do not add background sync or signed-in offline writes yet.
-- Defer Realtime and general offline sync until there is evidence they are needed.
+  do not add service-worker background sync.
+- Synchronize pending account changes while Coin is open or reopened online,
+  and require an explicit choice for same-record multi-device conflicts.
+- Defer Realtime until there is evidence it is needed.
