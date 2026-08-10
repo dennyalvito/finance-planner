@@ -415,6 +415,21 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await page.getByRole("button", { name: "Save budget" }).click()
   await expect(page.getByText("Budget saved")).toBeVisible()
 
+  await page.getByRole("button", { name: "Adjust limit" }).click()
+  await expect(page.getByLabel("Monthly limit in IDR")).toHaveValue("2.000.000")
+  await page.getByRole("button", { name: "Remove budget" }).click()
+  const removeBudgetDialog = page.getByRole("alertdialog")
+  await expect(
+    removeBudgetDialog.getByRole("heading", {
+      name: "Remove this monthly budget?",
+    })
+  ).toBeVisible()
+  await removeBudgetDialog
+    .getByRole("button", { name: "Remove budget" })
+    .click()
+  await expect(page.getByText("Budget removed")).toBeVisible()
+  await expect(page.getByText("No budget limits yet")).toBeVisible()
+
   const animation = await page
     .getByTestId("route-stage")
     .evaluate((element) => {

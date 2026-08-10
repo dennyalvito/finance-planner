@@ -1,14 +1,33 @@
 import { useState } from "react"
 import type { FormEvent } from "react"
-import { LockIcon, PlusIcon } from "lucide-react"
+import {
+  LockIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -26,6 +45,13 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { Category, TransactionType } from "@/domain/finance"
@@ -41,6 +67,8 @@ type CategoryManagerProps = {
   canCustomize: boolean
   onSignIn: () => void
   onCreateCategory: (name: string, type: TransactionType) => Promise<Category>
+  onUpdateCategory: (id: string, name: string) => Promise<void>
+  onDeleteCategory: (id: string) => Promise<void>
 }
 
 export function CategoryManager({
@@ -50,12 +78,19 @@ export function CategoryManager({
   canCustomize,
   onSignIn,
   onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
 }: CategoryManagerProps) {
   const isMobile = useIsMobile()
   const [type, setType] = useState<TransactionType>("expense")
   const [name, setName] = useState("")
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [renameCategory, setRenameCategory] = useState<Category>()
+  const [renameName, setRenameName] = useState("")
+  const [renaming, setRenaming] = useState(false)
+  const [deleteCategory, setDeleteCategory] = useState<Category>()
+  const [deleting, setDeleting] = useState(false)
   const nameInvalid = submitted && name.trim().length < 2
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -76,6 +111,41 @@ export function CategoryManager({
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleRename(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!renameCategory || renameName.trim().length < 2) return
+    setRenaming(true)
+    try {
+      await onUpdateCategory(renameCategory.id, renameName.trim())
+      toast.success("Category renamed")
+      setRenameCategory(undefined)
+    } catch (error) {
+      toast.error("Could not rename category", {
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+      })
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteCategory) return
+    setDeleting(true)
+    try {
+      await onDeleteCategory(deleteCategory.id)
+      toast.success("Category deleted")
+      setDeleteCategory(undefined)
+    } catch (error) {
+      toast.error("Could not delete category", {
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+      })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -102,8 +172,54 @@ export function CategoryManager({
                         <span className="min-w-0 flex-1 truncate text-sm">
                           {category.name}
                         </span>
-                        {category.isCustom && (
+                        {category.syncStatus && (
+                          <Badge
+                            variant={
+                              category.syncStatus === "conflict"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                          >
+                            {category.syncStatus === "conflict"
+                              ? "Conflict"
+                              : "Pending"}
+                          </Badge>
+                        )}
+                        {category.isCustom && !category.syncStatus && (
                           <Badge variant="outline">Custom</Badge>
+                        )}
+                        {category.isCustom && canCustomize && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Manage ${category.name}`}
+                              >
+                                <MoreHorizontalIcon />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setRenameName(category.name)
+                                    setRenameCategory(category)
+                                  }}
+                                >
+                                  <PencilIcon />
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() => setDeleteCategory(category)}
+                                >
+                                  <Trash2Icon />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
                     </div>
@@ -182,33 +298,128 @@ export function CategoryManager({
     </div>
   )
 
+  const managementDialogs = (
+    <>
+      <Dialog
+        open={renameCategory !== undefined}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setRenameCategory(undefined)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename category</DialogTitle>
+            <DialogDescription>
+              Transactions and budgets keep the same category ID.
+            </DialogDescription>
+          </DialogHeader>
+          <form id="rename-category-form" onSubmit={handleRename}>
+            <FieldGroup>
+              <Field data-invalid={renameName.trim().length < 2}>
+                <FieldLabel htmlFor="rename-category-name">
+                  Category name
+                </FieldLabel>
+                <Input
+                  id="rename-category-name"
+                  value={renameName}
+                  onChange={(event) => setRenameName(event.target.value)}
+                  maxLength={40}
+                  aria-invalid={renameName.trim().length < 2}
+                  autoFocus
+                />
+                {renameName.trim().length < 2 && (
+                  <FieldError>Use at least two characters.</FieldError>
+                )}
+              </Field>
+            </FieldGroup>
+          </form>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={renaming}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              form="rename-category-form"
+              disabled={renaming || renameName.trim().length < 2}
+            >
+              <PencilIcon data-icon="inline-start" />
+              {renaming ? "Renaming..." : "Rename"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={deleteCategory !== undefined}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setDeleteCategory(undefined)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Trash2Icon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Delete this category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCategory?.name} can only be deleted when no transactions or
+              budgets use it. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDelete()
+              }}
+            >
+              <Trash2Icon data-icon="inline-start" />
+              {deleting ? "Deleting..." : "Delete category"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="overflow-hidden data-[vaul-drawer-direction=bottom]:max-h-[88svh]">
-          <DrawerHeader>
-            <DrawerTitle>Categories</DrawerTitle>
-            <DrawerDescription>
-              Labels available when adding transactions.
-            </DrawerDescription>
-          </DrawerHeader>
-          {content}
-        </DrawerContent>
-      </Drawer>
+      <>
+        <Drawer open={open} onOpenChange={onOpenChange}>
+          <DrawerContent className="overflow-hidden data-[vaul-drawer-direction=bottom]:max-h-[88svh]">
+            <DrawerHeader>
+              <DrawerTitle>Categories</DrawerTitle>
+              <DrawerDescription>
+                Labels available when adding transactions.
+              </DrawerDescription>
+            </DrawerHeader>
+            {content}
+          </DrawerContent>
+        </Drawer>
+        {managementDialogs}
+      </>
     )
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Categories</DialogTitle>
-          <DialogDescription>
-            Labels available when adding transactions.
-          </DialogDescription>
-        </DialogHeader>
-        {content}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Categories</DialogTitle>
+            <DialogDescription>
+              Labels available when adding transactions.
+            </DialogDescription>
+          </DialogHeader>
+          {content}
+        </DialogContent>
+      </Dialog>
+      {managementDialogs}
+    </>
   )
 }

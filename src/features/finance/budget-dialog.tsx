@@ -1,9 +1,21 @@
 import { useEffect, useState } from "react"
 import type { FormEvent } from "react"
-import { GaugeIcon } from "lucide-react"
+import { GaugeIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogClose,
@@ -38,7 +50,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { Category } from "@/domain/finance"
+import type { Budget, Category } from "@/domain/finance"
+import { monthKey } from "@/domain/finance"
 import {
   formatIdrAmountInput,
   parseIdrAmount,
@@ -52,22 +65,32 @@ type BudgetDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   categories: Category[]
+  budgets: Budget[]
   initialCategoryId?: string
   onSubmit: (categoryId: string, amount: number) => Promise<void>
+  onDelete: (categoryId: string, month: string) => Promise<void>
 }
 
 export function BudgetDialog({
   open,
   onOpenChange,
   categories,
+  budgets,
   initialCategoryId,
   onSubmit,
+  onDelete,
 }: BudgetDialogProps) {
   const isMobile = useIsMobile()
   const [categoryId, setCategoryId] = useState("")
   const [amount, setAmount] = useState("")
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const currentMonth = monthKey(new Date())
+  const selectedBudget = budgets.find(
+    (budget) =>
+      budget.month === currentMonth && budget.categoryId === categoryId
+  )
   const numericAmount = parseIdrAmount(amount)
   const amountInvalid = submitted && numericAmount < 1
   const categoryInvalid = submitted && !categoryId
@@ -82,10 +105,16 @@ export function BudgetDialog({
       expenseCategories.find((category) => category.id === "food") ??
       expenseCategories.at(0)
 
-    setCategoryId(preferredCategory?.id ?? "")
-    setAmount("")
+    const preferredCategoryId = preferredCategory?.id ?? ""
+    const existingBudget = budgets.find(
+      (budget) =>
+        budget.month === currentMonth &&
+        budget.categoryId === preferredCategoryId
+    )
+    setCategoryId(preferredCategoryId)
+    setAmount(existingBudget ? String(existingBudget.amount) : "")
     setSubmitted(false)
-  }, [categories, initialCategoryId, open])
+  }, [budgets, categories, currentMonth, initialCategoryId, open])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -112,6 +141,66 @@ export function BudgetDialog({
     }
   }
 
+  async function handleDelete() {
+    if (!selectedBudget) return
+    setDeleting(true)
+    try {
+      await onDelete(selectedBudget.categoryId, selectedBudget.month)
+      toast.success("Budget removed", {
+        description: "This category is now unbudgeted for the month.",
+      })
+      onOpenChange(false)
+    } catch (error) {
+      toast.error("Could not remove budget", {
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const deleteButton = selectedBudget ? (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          type="button"
+          variant="destructive"
+          disabled={saving || deleting}
+        >
+          <Trash2Icon data-icon="inline-start" />
+          Remove budget
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia className="bg-destructive/10 text-destructive">
+            <Trash2Icon />
+          </AlertDialogMedia>
+          <AlertDialogTitle>Remove this monthly budget?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Transactions stay unchanged. This category will become unbudgeted
+            for {currentMonth}.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={deleting}
+            onClick={(event) => {
+              event.preventDefault()
+              void handleDelete()
+            }}
+          >
+            <Trash2Icon data-icon="inline-start" />
+            {deleting ? "Removing..." : "Remove budget"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  ) : null
+
   const form = (
     <form
       id={formId}
@@ -123,7 +212,18 @@ export function BudgetDialog({
       <FieldGroup>
         <Field data-invalid={categoryInvalid}>
           <FieldLabel htmlFor="budget-category">Expense category</FieldLabel>
-          <Select value={categoryId} onValueChange={setCategoryId}>
+          <Select
+            value={categoryId}
+            onValueChange={(nextCategoryId) => {
+              setCategoryId(nextCategoryId)
+              const budget = budgets.find(
+                (item) =>
+                  item.month === currentMonth &&
+                  item.categoryId === nextCategoryId
+              )
+              setAmount(budget ? String(budget.amount) : "")
+            }}
+          >
             <SelectTrigger
               id="budget-category"
               className="w-full"
@@ -183,6 +283,7 @@ export function BudgetDialog({
           </DrawerHeader>
           {form}
           <DrawerFooter className="border-t">
+            {deleteButton}
             <Button type="submit" form={formId} disabled={saving}>
               <GaugeIcon data-icon="inline-start" />
               {saving ? "Saving..." : "Save budget"}
@@ -205,6 +306,7 @@ export function BudgetDialog({
         </DialogHeader>
         {form}
         <DialogFooter>
+          {deleteButton}
           <DialogClose asChild>
             <Button type="button" variant="outline">
               Cancel

@@ -133,12 +133,14 @@ import type {
   LedgerSummary,
 } from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
+import { GuardedSignOutDialog } from "@/features/auth/guarded-sign-out-dialog"
 import { SignInDialog } from "@/features/auth/sign-in-dialog"
 import { BudgetDialog } from "@/features/finance/budget-dialog"
 import { CategoryManager } from "@/features/finance/category-manager"
 import { getCategoryIcon } from "@/features/finance/category-icon"
 import { CloudWorkspaceStatus } from "@/features/finance/cloud-workspace-status"
 import { TransactionDialog } from "@/features/finance/transaction-dialog"
+import { SyncStatus } from "@/features/finance/sync-status"
 import { useFinance } from "@/features/finance/use-finance"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -247,6 +249,7 @@ type CoinAppContextValue = ReturnType<typeof useFinance> & {
   openBudget: (categoryId?: string) => void
   openSignIn: () => void
   openTransaction: (transaction?: FinanceTransaction) => void
+  requestSignOut: () => void
 }
 
 type TransactionOverlayContextValue = {
@@ -346,6 +349,9 @@ export function CoinApp() {
 }
 
 function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
+  const auth = useAuth()
+  const { signOut } = auth
+  const { clearAccountData, getPendingCount, syncPendingChanges } = finance
   const pathname = useLocation({
     select: (location) => location.pathname,
   })
@@ -354,6 +360,8 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   const [budgetOpen, setBudgetOpen] = useState(false)
   const [budgetCategoryId, setBudgetCategoryId] = useState<string>()
   const [signInOpen, setSignInOpen] = useState(false)
+  const [signOutOpen, setSignOutOpen] = useState(false)
+  const [signOutPendingCount, setSignOutPendingCount] = useState(0)
   const { openTransaction } = useTransactionOverlay()
   const openNewTransaction = useCallback(
     () => openTransaction(),
@@ -365,14 +373,39 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
     setBudgetOpen(true)
   }, [])
   const openSignIn = useCallback(() => setSignInOpen(true), [])
+  const completeSignOut = useCallback(async () => {
+    await signOut()
+    await clearAccountData()
+    toast.success("Signed out. Your guest workspace is still on this device.")
+  }, [clearAccountData, signOut])
+  const requestSignOut = useCallback(() => {
+    void getPendingCount()
+      .then(async (currentPendingCount) => {
+        if (currentPendingCount > 0) {
+          setSignOutPendingCount(currentPendingCount)
+          setSignOutOpen(true)
+          return
+        }
+        await completeSignOut()
+      })
+      .catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : "Sign-out failed.")
+      })
+  }, [completeSignOut, getPendingCount])
+  const syncAndSignOut = useCallback(async () => {
+    const remaining = await syncPendingChanges()
+    if (remaining === 0) await completeSignOut()
+    return remaining
+  }, [completeSignOut, syncPendingChanges])
   const contextValue = useMemo(
     () => ({
       ...finance,
       openBudget,
       openSignIn,
       openTransaction,
+      requestSignOut,
     }),
-    [finance, openBudget, openSignIn, openTransaction]
+    [finance, openBudget, openSignIn, openTransaction, requestSignOut]
   )
 
   useEffect(() => {
@@ -393,6 +426,7 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
             view={view}
             onAdd={openNewTransaction}
             onSignIn={openSignIn}
+            onSignOut={requestSignOut}
           />
           <div
             key={view}
@@ -407,8 +441,22 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
                 isRefreshing={finance.isRefreshing}
                 onRetry={() => void finance.retryCloud()}
               />
+              {finance.storage === "cloud" && (
+                <SyncStatus
+                  pendingCount={finance.pendingCount}
+                  conflicts={finance.conflicts}
+                  isOnline={finance.isOnline}
+                  isRefreshing={finance.isRefreshing}
+                  onSync={finance.syncNow}
+                  onUseCloud={finance.useCloudConflict}
+                  onUseDevice={finance.useDeviceConflict}
+                />
+              )}
               {finance.cloudState !== "loading" &&
-                finance.cloudState !== "error" &&
+                !(
+                  finance.cloudState === "error" &&
+                  finance.issue?.source !== "sync"
+                ) &&
                 !(
                   finance.cloudState === "offline" &&
                   finance.issue?.source === "load"
@@ -422,10 +470,20 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
           open={budgetOpen}
           onOpenChange={setBudgetOpen}
           categories={finance.categories}
+          budgets={finance.budgets}
           initialCategoryId={budgetCategoryId}
           onSubmit={finance.saveBudget}
+          onDelete={finance.deleteBudget}
         />
         <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
+        <GuardedSignOutDialog
+          open={signOutOpen}
+          onOpenChange={setSignOutOpen}
+          pendingCount={Math.max(signOutPendingCount, finance.pendingCount)}
+          isOnline={finance.isOnline}
+          onSync={syncAndSignOut}
+          onDiscardAndSignOut={completeSignOut}
+        />
       </SidebarProvider>
     </CoinAppContext.Provider>
   )
@@ -483,7 +541,10 @@ export function SettingsPage() {
     <SettingsView
       categories={finance.categories}
       onSignIn={finance.openSignIn}
+      onSignOut={finance.requestSignOut}
       onCreateCategory={finance.createCategory}
+      onUpdateCategory={finance.updateCategory}
+      onDeleteCategory={finance.deleteCategory}
     />
   )
 }
@@ -603,25 +664,18 @@ function AppHeader({
   view,
   onAdd,
   onSignIn,
+  onSignOut,
 }: {
   view: CoinView
   onAdd: () => void
   onSignIn: () => void
+  onSignOut: () => void
 }) {
   const auth = useAuth()
   const title =
     navigation.find((item) => item.view === view)?.label ?? "Overview"
   const cloudWorkspace = auth.status === "authenticated"
   const profile = cloudWorkspace ? accountLabel(auth.user?.email) : "Guest mode"
-
-  const signOut = async () => {
-    try {
-      await auth.signOut()
-      toast.success("Signed out. Your guest workspace is still on this device.")
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sign-out failed.")
-    }
-  }
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center border-b bg-background/90 px-4 backdrop-blur-xl sm:px-6 xl:px-8">
@@ -685,7 +739,7 @@ function AppHeader({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               {cloudWorkspace ? (
-                <DropdownMenuItem onSelect={() => void signOut()}>
+                <DropdownMenuItem onSelect={onSignOut}>
                   <LogOutIcon />
                   Sign out
                 </DropdownMenuItem>
@@ -2080,10 +2134,25 @@ function TransactionList({
               <p className="truncate text-sm font-medium">
                 {category?.name ?? "Other"}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {transaction.note ||
-                  (transaction.type === "income" ? "Income" : "Expense")}
-              </p>
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="truncate text-xs text-muted-foreground">
+                  {transaction.note ||
+                    (transaction.type === "income" ? "Income" : "Expense")}
+                </p>
+                {transaction.syncStatus && (
+                  <Badge
+                    variant={
+                      transaction.syncStatus === "conflict"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                  >
+                    {transaction.syncStatus === "conflict"
+                      ? "Conflict"
+                      : "Pending"}
+                  </Badge>
+                )}
+              </div>
             </div>
             <div className="shrink-0 text-right">
               <p
@@ -2416,13 +2485,28 @@ function BudgetsView({
                 />
               </CardContent>
               <CardFooter>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onBudget(budget.categoryId)}
-                >
-                  Adjust limit
-                </Button>
+                <div className="flex w-full items-center justify-between gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onBudget(budget.categoryId)}
+                  >
+                    Adjust limit
+                  </Button>
+                  {budget.syncStatus && (
+                    <Badge
+                      variant={
+                        budget.syncStatus === "conflict"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                    >
+                      {budget.syncStatus === "conflict"
+                        ? "Conflict"
+                        : "Pending"}
+                    </Badge>
+                  )}
+                </div>
               </CardFooter>
             </Card>
           )
@@ -2463,11 +2547,17 @@ function SummaryValue({ label, value }: { label: string; value: number }) {
 function SettingsView({
   categories,
   onSignIn,
+  onSignOut,
   onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
 }: {
   categories: Category[]
   onSignIn: () => void
+  onSignOut: () => void
   onCreateCategory: ReturnType<typeof useFinance>["createCategory"]
+  onUpdateCategory: ReturnType<typeof useFinance>["updateCategory"]
+  onDeleteCategory: ReturnType<typeof useFinance>["deleteCategory"]
 }) {
   const auth = useAuth()
   const [categoriesOpen, setCategoriesOpen] = useState(false)
@@ -2482,15 +2572,6 @@ function SettingsView({
   const profileDetail = cloudWorkspace
     ? auth.user?.email
     : "Your finance stays on this device"
-
-  const signOut = async () => {
-    try {
-      await auth.signOut()
-      toast.success("Signed out. Your guest workspace is still on this device.")
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sign-out failed.")
-    }
-  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -2515,7 +2596,7 @@ function SettingsView({
             </p>
           </div>
           {cloudWorkspace ? (
-            <Button variant="outline" onClick={() => void signOut()}>
+            <Button variant="outline" onClick={onSignOut}>
               <LogOutIcon data-icon="inline-start" />
               Sign out
             </Button>
@@ -2595,6 +2676,8 @@ function SettingsView({
         canCustomize={cloudWorkspace}
         onSignIn={onSignIn}
         onCreateCategory={onCreateCategory}
+        onUpdateCategory={onUpdateCategory}
+        onDeleteCategory={onDeleteCategory}
       />
     </div>
   )
