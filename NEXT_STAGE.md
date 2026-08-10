@@ -2,7 +2,7 @@
 
 Status: Reliability implemented; authenticated verification execution pending
 
-Baseline date: 2026-08-05
+Baseline date: 2026-08-08
 
 ## Purpose
 
@@ -48,6 +48,9 @@ ordered execution handoff.
 - Custom category creation is account-only by current product decision. Guests
   use the built-in category templates.
 - Animations are CSS-based. GSAP is not part of the project.
+- Coin is installable as a PWA with branded platform icons and a precached app
+  shell. The service worker uses browser-managed update checks with no polling,
+  background sync, push listener, or update prompt.
 
 ## Verified baseline
 
@@ -108,8 +111,6 @@ domain before public launch.
 3. Add transaction search; date and type filters are implemented.
 4. Apply period controls consistently where desktop users need them.
 5. Define export, backup, account deletion, and cloud-data deletion.
-6. Replace the boilerplate manifest and add a service worker if PWA support is
-   promoted into scope.
 
 ## Explicit non-goals
 
@@ -120,6 +121,8 @@ Tailwind, work directly in this repository, and do not use the Sites skill.
 
 ## Key files
 
+- `src/features/pwa/pwa-registration.tsx` — lean service-worker registration
+- `vite.config.ts` — PWA manifest, app-shell precache, and build integration
 - `PRD.md` — product decisions and requirements
 - `src/domain/finance.ts` — calculations and IDR semantics
 - `src/features/finance/use-finance.ts` — workspace selection and cloud state

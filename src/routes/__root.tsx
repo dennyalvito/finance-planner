@@ -9,6 +9,7 @@ import { ThemeProvider } from "next-themes"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AuthProvider } from "@/features/auth/auth-provider"
+import { PwaRegistration } from "@/features/pwa/pwa-registration"
 import appCss from "../styles.css?url"
 
 export const Route = createRootRoute({
@@ -34,11 +35,46 @@ export const Route = createRootRoute({
         name: "theme-color",
         content: "#0d100e",
       },
+      {
+        name: "mobile-web-app-capable",
+        content: "yes",
+      },
+      {
+        name: "apple-mobile-web-app-capable",
+        content: "yes",
+      },
+      {
+        name: "apple-mobile-web-app-status-bar-style",
+        content: "black-translucent",
+      },
+      {
+        name: "apple-mobile-web-app-title",
+        content: "Coin",
+      },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "manifest",
+        href: "/manifest.webmanifest",
+      },
+      {
+        rel: "icon",
+        href: "/favicon.ico",
+        sizes: "48x48",
+      },
+      {
+        rel: "icon",
+        href: "/favicon.svg",
+        sizes: "any",
+        type: "image/svg+xml",
+      },
+      {
+        rel: "apple-touch-icon",
+        href: "/apple-touch-icon-180x180.png",
       },
     ],
   }),
@@ -66,6 +102,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <AuthProvider>
             <TooltipProvider>
               {children}
+              <PwaRegistration />
               <Toaster position="top-center" richColors />
             </TooltipProvider>
           </AuthProvider>

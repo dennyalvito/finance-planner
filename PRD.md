@@ -2,7 +2,7 @@
 
 Status: Core MVP and account reliability implemented; import decision pending
 
-Last updated: 2026-08-05
+Last updated: 2026-08-08
 
 Execution handoff: [NEXT_STAGE.md](./NEXT_STAGE.md)
 
@@ -61,6 +61,8 @@ complete, first-class experience.
 - Cloud loading, empty, offline, failed-load, failed-mutation, and retry UX
 - Transactional RLS tests and an authenticated browser verification workflow
 - Empty first-visit guest ledger with built-in transaction categories
+- Installable PWA metadata, platform icons, and a service worker that precaches
+  the local app shell for offline guest access
 - Unit tests for finance calculations
 - Playwright coverage for critical guest workflows
 
@@ -74,7 +76,6 @@ complete, first-class experience.
 - The local RLS suite needs Docker and a running local Supabase stack.
 - Real Google identity continuity remains a manual verification.
 - Budget removal and category rename/delete are absent.
-- Coin is not yet an installable PWA.
 - Realtime synchronization and signed-in offline writes are deferred.
 
 ## 4. Goals for the backend stage
@@ -449,7 +450,6 @@ Both repositories should satisfy the same behavioral contract for:
 3. What final production/custom domain should be allow-listed after the Vercel
    deployment exists?
 4. What is the account and cloud-data deletion policy?
-5. Should installable PWA support be part of beta hardening or a later release?
 
 ## 17. Recorded initial decisions
 
@@ -460,4 +460,6 @@ Both repositories should satisfy the same behavioral contract for:
 - Keep guest and account workspaces separate until an explicit import phase.
 - Offer import from Settings after sign-in rather than interrupting the first successful login.
 - Use migrations, least-privilege grants, and Row Level Security from the first database change.
+- Ship installable PWA support with a lean browser-managed update lifecycle;
+  do not add background sync or signed-in offline writes yet.
 - Defer Realtime and general offline sync until there is evidence they are needed.

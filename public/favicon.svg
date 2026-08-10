@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Coin</title>
+  <desc id="description">A gold coin with a rupiah-inspired currency mark.</desc>
+  <rect width="512" height="512" rx="112" fill="#0d100e" />
+  <circle cx="256" cy="256" r="156" fill="#e5b95e" />
+  <circle cx="256" cy="256" r="132" fill="none" stroke="#0d100e" stroke-width="14" opacity=".2" />
+  <path
+    d="M191 170h80c37 0 65 25 65 59 0 33-27 58-65 58h-40v59h-40V170Zm40 38v41h38c16 0 27-8 27-20 0-13-11-21-27-21h-38Z"
+    fill="#0d100e"
+  />
+  <path d="M238 270h108v38H238z" fill="#0d100e" />
+  <path d="M238 326h108v38H238z" fill="#0d100e" />
+</svg>
