@@ -37,6 +37,12 @@ class CoinDatabase extends Dexie {
       budgets: "id,month,categoryId",
       settings: "key",
     })
+    this.version(3).stores({
+      transactions: "id,date,type,categoryId,createdAt",
+      categories: "id,name,type",
+      budgets: "id,[month+categoryId],month,categoryId",
+      settings: "key",
+    })
   }
 }
 
@@ -141,6 +147,47 @@ export async function createCategory(name: string, type: TransactionType) {
   return category
 }
 
+export async function updateCategory(id: string, name: string) {
+  const db = getFinanceDatabase()
+  if (!db) throw new Error("Local storage is unavailable.")
+  const category = await db.categories.get(id)
+  if (!category?.isCustom) {
+    throw new Error("Only custom categories can be renamed.")
+  }
+  const duplicate = await db.categories
+    .where("type")
+    .equals(category.type)
+    .filter(
+      (item) =>
+        item.id !== id &&
+        item.name.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()
+    )
+    .first()
+  if (duplicate) throw new Error("A category with this name already exists.")
+  const updated = await db.categories.update(id, { name: name.trim() })
+  if (!updated) throw new Error("Category was not found.")
+}
+
+export async function deleteCategory(id: string) {
+  const db = getFinanceDatabase()
+  if (!db) throw new Error("Local storage is unavailable.")
+  const category = await db.categories.get(id)
+  if (!category?.isCustom) {
+    throw new Error("Only custom categories can be deleted.")
+  }
+
+  const [transactionCount, budgetCount] = await Promise.all([
+    db.transactions.where("categoryId").equals(id).count(),
+    db.budgets.where("categoryId").equals(id).count(),
+  ])
+  if (transactionCount > 0 || budgetCount > 0) {
+    throw new Error(
+      "This category is used by transactions or budgets. Reassign or remove them first."
+    )
+  }
+  await db.categories.delete(id)
+}
+
 export async function saveBudget(categoryId: string, amount: number) {
   const db = getFinanceDatabase()
   if (!db) throw new Error("Local storage is unavailable.")
@@ -152,6 +199,15 @@ export async function saveBudget(categoryId: string, amount: number) {
     month,
     updatedAt: Date.now(),
   })
+}
+
+export async function deleteBudget(categoryId: string, month: string) {
+  const db = getFinanceDatabase()
+  if (!db) throw new Error("Local storage is unavailable.")
+  await db.budgets
+    .where("[month+categoryId]")
+    .equals([month, categoryId])
+    .delete()
 }
 
 export async function clearDemoTransactions() {
@@ -171,6 +227,9 @@ export const localFinanceRepository: FinanceRepository = {
   updateTransaction,
   deleteTransaction,
   createCategory,
+  updateCategory,
+  deleteCategory,
   saveBudget,
+  deleteBudget,
   clearDemoTransactions,
 }

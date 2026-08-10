@@ -1,10 +1,13 @@
 export type TransactionType = "income" | "expense"
 
+export type RecordSyncStatus = "pending" | "conflict"
+
 export type Category = {
   id: string
   name: string
   type: TransactionType
   isCustom: boolean
+  syncStatus?: RecordSyncStatus
 }
 
 export type FinanceTransaction = {
@@ -16,6 +19,7 @@ export type FinanceTransaction = {
   note: string
   createdAt: number
   isDemo?: boolean
+  syncStatus?: RecordSyncStatus
 }
 
 export type NewTransaction = Omit<
@@ -29,6 +33,7 @@ export type Budget = {
   amount: number
   month: string
   updatedAt: number
+  syncStatus?: RecordSyncStatus
 }
 
 export type LedgerSummary = {

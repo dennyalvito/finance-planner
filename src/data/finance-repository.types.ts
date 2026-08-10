@@ -19,6 +19,9 @@ export type FinanceRepository = {
   updateTransaction: (id: string, transaction: NewTransaction) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
   createCategory: (name: string, type: TransactionType) => Promise<Category>
+  updateCategory: (id: string, name: string) => Promise<void>
+  deleteCategory: (id: string) => Promise<void>
   saveBudget: (categoryId: string, amount: number) => Promise<void>
+  deleteBudget: (categoryId: string, month: string) => Promise<void>
   clearDemoTransactions: () => Promise<void>
 }

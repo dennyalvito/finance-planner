@@ -38,6 +38,9 @@ describe("Supabase finance row mapping", () => {
       type: "expense",
       is_custom: false,
       created_at: "2026-07-25T10:00:00.000Z",
+      updated_at: "2026-07-25T10:00:00.000Z",
+      revision: 1,
+      deleted_at: null,
     }
     const transaction: Tables<"transactions"> = {
       id: "9a13d26e-eb01-48a8-8dcf-8a1da5c91085",
@@ -48,6 +51,9 @@ describe("Supabase finance row mapping", () => {
       date: "2026-07-25",
       note: "Lunch",
       created_at: "2026-07-25T10:00:00.000Z",
+      updated_at: "2026-07-25T10:00:00.000Z",
+      revision: 1,
+      deleted_at: null,
     }
     const budget: Tables<"budgets"> = {
       id: "f21fc143-87bb-40fb-ab5e-2537d823fc38",
@@ -56,6 +62,8 @@ describe("Supabase finance row mapping", () => {
       month: "2026-07-01",
       amount: 2_000_000,
       updated_at: "2026-07-25T11:00:00.000Z",
+      revision: 1,
+      deleted_at: null,
     }
 
     expect(mapCategoryRow(category)).toEqual({
@@ -89,6 +97,9 @@ describe("Supabase finance row mapping", () => {
       date: "2026-07-25",
       note: "",
       created_at: "2026-07-25T10:00:00.000Z",
+      updated_at: "2026-07-25T10:00:00.000Z",
+      revision: 1,
+      deleted_at: null,
     }
 
     expect(() => mapTransactionRow(row)).toThrow(

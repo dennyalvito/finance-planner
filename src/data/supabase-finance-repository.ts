@@ -66,19 +66,28 @@ export function createSupabaseFinanceRepository(
       await Promise.all([
         client
           .from("transactions")
-          .select("id,user_id,type,amount,category_id,date,note,created_at")
+          .select(
+            "id,user_id,type,amount,category_id,date,note,created_at,updated_at,revision,deleted_at"
+          )
           .eq("user_id", userId)
+          .is("deleted_at", null)
           .order("date", { ascending: false })
           .order("created_at", { ascending: false }),
         client
           .from("categories")
-          .select("id,user_id,name,type,is_custom,created_at")
+          .select(
+            "id,user_id,name,type,is_custom,created_at,updated_at,revision,deleted_at"
+          )
           .or(`user_id.is.null,user_id.eq.${userId}`)
+          .is("deleted_at", null)
           .order("name"),
         client
           .from("budgets")
-          .select("id,user_id,category_id,month,amount,updated_at")
-          .eq("user_id", userId),
+          .select(
+            "id,user_id,category_id,month,amount,updated_at,revision,deleted_at"
+          )
+          .eq("user_id", userId)
+          .is("deleted_at", null),
       ])
 
     if (transactionsResult.error) throw transactionsResult.error
@@ -108,7 +117,7 @@ export function createSupabaseFinanceRepository(
   async function deleteTransaction(id: string) {
     const { error } = await client
       .from("transactions")
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq("id", id)
       .eq("user_id", userId)
 
@@ -144,11 +153,41 @@ export function createSupabaseFinanceRepository(
         type,
         is_custom: true,
       })
-      .select("id,user_id,name,type,is_custom,created_at")
+      .select(
+        "id,user_id,name,type,is_custom,created_at,updated_at,revision,deleted_at"
+      )
       .single()
 
     if (error) throw error
     return mapCategoryRow(data)
+  }
+
+  async function updateCategory(id: string, name: string) {
+    const { data, error } = await client
+      .from("categories")
+      .update({ name: name.trim() })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .eq("is_custom", true)
+      .select("id")
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) throw new Error("Custom category was not found.")
+  }
+
+  async function deleteCategory(id: string) {
+    const { data, error } = await client
+      .from("categories")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .eq("is_custom", true)
+      .select("id")
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) throw new Error("Custom category was not found.")
   }
 
   async function saveBudget(categoryId: string, amount: number) {
@@ -160,11 +199,26 @@ export function createSupabaseFinanceRepository(
         month,
         amount,
         updated_at: new Date().toISOString(),
+        deleted_at: null,
       },
       { onConflict: "user_id,month,category_id" }
     )
 
     if (error) throw error
+  }
+
+  async function deleteBudget(categoryId: string, month: string) {
+    const { data, error } = await client
+      .from("budgets")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("category_id", categoryId)
+      .eq("month", `${month}-01`)
+      .select("id")
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) throw new Error("Budget was not found.")
   }
 
   return {
@@ -174,7 +228,10 @@ export function createSupabaseFinanceRepository(
     updateTransaction,
     deleteTransaction,
     createCategory,
+    updateCategory,
+    deleteCategory,
     saveBudget,
+    deleteBudget,
     clearDemoTransactions: async () => undefined,
   }
 }
