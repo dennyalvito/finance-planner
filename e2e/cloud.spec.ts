@@ -74,6 +74,16 @@ test.describe("authenticated cloud workspace", () => {
       .getByRole("button", { name: "Add transaction" })
       .click()
     await expect(page.getByText(cloudNote)).toBeVisible()
+    await expect
+      .poll(async () => {
+        const { data: persisted } = await client
+          .from("transactions")
+          .select("id")
+          .eq("note", cloudNote)
+          .is("deleted_at", null)
+        return persisted?.length ?? 0
+      })
+      .toBe(1)
 
     const cloudTransactionRow = page
       .locator("[data-transaction-row]")
@@ -86,6 +96,16 @@ test.describe("authenticated cloud workspace", () => {
     await page.getByRole("button", { name: "Save changes" }).click()
     await expect(page.getByText("Transaction updated")).toBeVisible()
     await expect(page.getByText(editedCloudNote)).toBeVisible()
+    await expect
+      .poll(async () => {
+        const { data: persisted } = await client
+          .from("transactions")
+          .select("id")
+          .eq("note", editedCloudNote)
+          .is("deleted_at", null)
+        return persisted?.length ?? 0
+      })
+      .toBe(1)
 
     await page.reload()
     await page.locator('[data-app-ready="true"]').waitFor()
@@ -102,9 +122,73 @@ test.describe("authenticated cloud workspace", () => {
 
     const { error: cleanupError } = await client
       .from("transactions")
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq("note", editedCloudNote)
 
+    expect(cleanupError).toBeNull()
+  })
+
+  test("queues an authenticated transaction offline and syncs it when connectivity returns", async ({
+    context,
+    page,
+  }) => {
+    const client = createClient<Database>(supabaseUrl!, publishableKey!, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+    const { data, error } = await client.auth.signInWithPassword({
+      email: testEmail!,
+      password: testPassword!,
+    })
+    expect(error).toBeNull()
+    expect(data.session).not.toBeNull()
+
+    const projectRef = new URL(supabaseUrl!).hostname.split(".")[0]
+    const storageKey = `sb-${projectRef}-auth-token`
+    const offlineNote = `Offline queue ${crypto.randomUUID()}`
+
+    await page.goto("/transactions")
+    await page.evaluate(
+      ([key, session]) => localStorage.setItem(key, JSON.stringify(session)),
+      [storageKey, data.session] as const
+    )
+    await page.reload()
+    await page.locator('[data-app-ready="true"]').waitFor()
+    await expect(
+      page.getByText("Cloud workspace", { exact: true }).first()
+    ).toBeVisible()
+
+    await context.setOffline(true)
+    await expect(page.getByText(/offline/i).first()).toBeVisible()
+    await page.getByTestId("add-transaction-desktop").click()
+    await page.getByLabel("Amount in IDR").fill("33000")
+    await page.getByLabel("Note").fill(offlineNote)
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Add transaction" })
+      .click()
+    await expect(page.getByText(offlineNote)).toBeVisible()
+    await expect(page.getByText(/1 change waiting to sync/i)).toBeVisible()
+
+    await context.setOffline(false)
+    await expect
+      .poll(async () => {
+        const { data: persisted } = await client
+          .from("transactions")
+          .select("id")
+          .eq("note", offlineNote)
+          .is("deleted_at", null)
+        return persisted?.length ?? 0
+      })
+      .toBe(1)
+    await expect(page.getByText(/1 change waiting to sync/i)).toHaveCount(0)
+
+    const { error: cleanupError } = await client
+      .from("transactions")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("note", offlineNote)
     expect(cleanupError).toBeNull()
   })
 })

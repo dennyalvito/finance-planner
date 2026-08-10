@@ -88,7 +88,10 @@ export function CloudWorkspaceStatus({
     return <LoadingCloudWorkspace />
   }
 
-  if (state === "error" || (state === "offline" && issue?.source === "load")) {
+  if (
+    (state === "error" && issue?.source !== "sync") ||
+    (state === "offline" && issue?.source === "load")
+  ) {
     const offline = state === "offline"
 
     return (
@@ -138,7 +141,7 @@ export function CloudWorkspaceStatus({
       <AlertTitle>{issue?.title ?? "Cloud workspace is offline"}</AlertTitle>
       <AlertDescription>
         {issue?.message ??
-          "Existing data remains visible, but cloud changes need an internet connection."}
+          "Changes are saved on this device and will sync when Coin is open and online."}
       </AlertDescription>
     </Alert>
   )
