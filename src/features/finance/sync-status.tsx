@@ -1,9 +1,5 @@
 import { useEffect, useState } from "react"
-import {
-  CloudUploadIcon,
-  GitCompareArrowsIcon,
-  RefreshCwIcon,
-} from "lucide-react"
+import { CloudUploadIcon, GitCompareArrowsIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -37,8 +33,6 @@ type SyncStatusProps = {
   pendingCount: number
   conflicts: SyncConflict[]
   isOnline: boolean
-  isRefreshing: boolean
-  onSync: () => Promise<unknown>
   onUseCloud: (conflict: SyncConflict) => Promise<void>
   onUseDevice: (conflict: SyncConflict) => Promise<void>
 }
@@ -113,8 +107,6 @@ export function SyncStatus({
   pendingCount,
   conflicts,
   isOnline,
-  isRefreshing,
-  onSync,
   onUseCloud,
   onUseDevice,
 }: SyncStatusProps) {
@@ -183,7 +175,7 @@ export function SyncStatus({
             </Button>
           </AlertAction>
         </Alert>
-      ) : pendingCount > 0 ? (
+      ) : !isOnline && pendingCount > 0 ? (
         <Alert>
           <CloudUploadIcon />
           <AlertTitle>
@@ -191,25 +183,9 @@ export function SyncStatus({
             to sync
           </AlertTitle>
           <AlertDescription>
-            {isOnline
-              ? "Your changes are safe on this device while Coin updates the cloud."
-              : "Your changes are safe on this device and will sync when Coin is online."}
+            Your changes are safe on this device and will sync when Coin is
+            online.
           </AlertDescription>
-          <AlertAction>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!isOnline || isRefreshing}
-              onClick={() => void onSync()}
-            >
-              {isRefreshing ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <RefreshCwIcon data-icon="inline-start" />
-              )}
-              {isRefreshing ? "Syncing..." : "Sync now"}
-            </Button>
-          </AlertAction>
         </Alert>
       ) : null}
 
