@@ -65,7 +65,8 @@ complete, first-class experience.
 - Transactional RLS tests and an authenticated browser verification workflow
 - Empty first-visit guest ledger with built-in transaction categories
 - Installable PWA metadata, platform icons, and a service worker that precaches
-  the local app shell
+  TanStack Start's generated SPA shell so guest and cached account workspaces
+  can reload or cold-launch offline
 - Signed-in offline CRUD for transactions, custom categories, and budgets after
   the account has been loaded once on that device
 - Per-record multi-device conflict detection with explicit cloud/device choices,

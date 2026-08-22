@@ -16,7 +16,11 @@ const config = defineConfig(async ({ mode }) => ({
   plugins: [
     devtools(),
     tailwindcss(),
-    tanstackStart(),
+    tanstackStart({
+      spa: {
+        enabled: true,
+      },
+    }),
     ...(mode === "test" ? [] : [nitro()]),
     viteReact(),
     ...(mode === "production"
@@ -96,9 +100,14 @@ const config = defineConfig(async ({ mode }) => ({
               ],
               maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
               additionalManifestEntries: [
-                { url: "/", revision: pwaBuildRevision },
+                { url: "/_shell.html", revision: pwaBuildRevision },
               ],
-              navigateFallback: "/",
+              navigateFallback: "/_shell.html",
+              navigateFallbackDenylist: [
+                /^\/api(?:\/|$)/,
+                /^\/auth(?:\/|$)/,
+                /^\/_serverFn(?:\/|$)/,
+              ],
             },
           }),
         ]

@@ -61,9 +61,10 @@ ordered execution handoff.
 - Signing out with pending changes shows a destructive warning with sync, stay,
   and explicit discard choices.
 - Animations are CSS-based. GSAP is not part of the project.
-- Coin is installable as a PWA with branded platform icons and a precached app
-  shell. The service worker uses browser-managed update checks with no polling,
-  background sync, push listener, or update prompt.
+- Coin is installable as a PWA with branded platform icons and a precached
+  TanStack Start SPA shell that supports offline reloads and cold launches. The
+  service worker uses browser-managed update checks with no polling, background
+  sync, push listener, or update prompt.
 
 ## Verified baseline
 
