@@ -11,6 +11,12 @@ const pwaBuildRevision =
   process.env.npm_package_version ??
   "development"
 
+// Nitro deploys Vercel static assets from the Build Output API directory.
+const pwaOutDir =
+  process.env.VERCEL === "1" || process.env.NITRO_PRESET === "vercel"
+    ? ".vercel/output/static"
+    : ".output/public"
+
 const config = defineConfig(async ({ mode }) => ({
   resolve: { tsconfigPaths: true },
   plugins: [
@@ -26,7 +32,7 @@ const config = defineConfig(async ({ mode }) => ({
     ...(mode === "production"
       ? [
           (await import("vite-plugin-pwa")).VitePWA({
-            outDir: ".output/public",
+            outDir: pwaOutDir,
             injectRegister: false,
             includeAssets: [
               "favicon.ico",
