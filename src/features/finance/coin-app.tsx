@@ -446,8 +446,6 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
                   pendingCount={finance.pendingCount}
                   conflicts={finance.conflicts}
                   isOnline={finance.isOnline}
-                  isRefreshing={finance.isRefreshing}
-                  onSync={finance.syncNow}
                   onUseCloud={finance.useCloudConflict}
                   onUseDevice={finance.useDeviceConflict}
                 />
