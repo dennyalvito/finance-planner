@@ -28,6 +28,10 @@ import { syncAccountFinance } from "@/data/supabase-finance-sync"
 import type { NewTransaction, TransactionType } from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
 import {
+  browserIsOnline,
+  subscribeToBrowserConnectivity,
+} from "@/features/finance/browser-connectivity"
+import {
   financeIssueFrom,
   isEmptyCloudSnapshot,
   syncIssueFrom,
@@ -69,25 +73,12 @@ export function useFinance() {
   const [cloudState, setCloudState] = useState<CloudWorkspaceState>("inactive")
   const [issue, setIssue] = useState<FinanceIssue | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isOnline, setIsOnline] = useState(
-    () => typeof navigator === "undefined" || navigator.onLine
-  )
+  const [isOnline, setIsOnline] = useState(browserIsOnline)
   const syncPromise = useRef<Promise<void> | null>(null)
   const syncRequested = useRef(false)
 
   useEffect(() => {
     void ensureFinanceSeed()
-  }, [])
-
-  useEffect(() => {
-    const updateOnlineState = () => setIsOnline(navigator.onLine)
-
-    window.addEventListener("online", updateOnlineState)
-    window.addEventListener("offline", updateOnlineState)
-    return () => {
-      window.removeEventListener("online", updateOnlineState)
-      window.removeEventListener("offline", updateOnlineState)
-    }
   }, [])
 
   const localTransactions = useLiveQuery(listTransactions, [], [])
@@ -138,7 +129,10 @@ export function useFinance() {
       return syncPromise.current
     }
 
-    if (!isOnline) {
+    const currentlyOnline = browserIsOnline()
+    setIsOnline(currentlyOnline)
+
+    if (!currentlyOnline) {
       const hasSnapshot = await accountHasSnapshot(accountDb)
       setCloudState("offline")
       setIssue(
@@ -163,7 +157,8 @@ export function useFinance() {
         const snapshot = await loadAccountSnapshot(accountDb)
         setCloudState(isEmptyCloudSnapshot(snapshot) ? "empty" : "ready")
       } catch {
-        const stillOnline = navigator.onLine
+        const stillOnline = browserIsOnline()
+        setIsOnline(stillOnline)
         setCloudState(stillOnline ? "error" : "offline")
         setIssue(
           (await accountHasSnapshot(accountDb))
@@ -185,7 +180,18 @@ export function useFinance() {
         queueMicrotask(() => void syncNow())
       }
     }
-  }, [accountDb, isOnline, userId])
+  }, [accountDb, userId])
+
+  useEffect(
+    () =>
+      subscribeToBrowserConnectivity((currentlyOnline, reason) => {
+        setIsOnline(currentlyOnline)
+        if (reason === "resume" && currentlyOnline && isOnline) {
+          void syncNow()
+        }
+      }),
+    [isOnline, syncNow]
+  )
 
   useEffect(() => {
     if (!accountDb) {
