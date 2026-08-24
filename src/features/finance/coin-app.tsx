@@ -997,8 +997,6 @@ function OverviewView({
         data-testid="desktop-overview"
         className="hidden flex-col gap-6 md:flex"
       >
-        <PageHeading eyebrow="Today" />
-
         <section
           aria-label="Financial summary"
           className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
@@ -1844,18 +1842,6 @@ function TransactionsView({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeading
-        eyebrow="Unified ledger"
-        title="Transactions"
-        description="Review, filter, and correct every recorded movement."
-        action={
-          <Button onClick={onAdd}>
-            <PlusIcon data-icon="inline-start" />
-            Add transaction
-          </Button>
-        }
-      />
-
       <Card data-testid="transaction-summary">
         <CardHeader>
           <CardTitle>{dateLabel}</CardTitle>
@@ -2401,17 +2387,6 @@ function BudgetsView({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeading
-        eyebrow="Optional limits"
-        title="Budgets"
-        description="Set boundaries only where they help. Unbudgeted categories stay unmetered."
-        action={
-          <Button onClick={() => onBudget()}>
-            <PlusIcon data-icon="inline-start" />
-            Add budget
-          </Button>
-        }
-      />
       <Card className="bg-primary text-primary-foreground">
         <CardHeader>
           <CardTitle>Monthly breathing room</CardTitle>
@@ -2573,11 +2548,6 @@ function SettingsView({
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <PageHeading
-        eyebrow="Account"
-        title="Profile"
-        description="Manage your Coin experience and personal finance preferences."
-      />
       <Card>
         <CardContent className="flex flex-col items-center gap-4 py-6 text-center sm:flex-row sm:text-left">
           <Avatar className="size-16">
@@ -2677,37 +2647,6 @@ function SettingsView({
         onUpdateCategory={onUpdateCategory}
         onDeleteCategory={onDeleteCategory}
       />
-    </div>
-  )
-}
-
-function PageHeading({
-  eyebrow,
-  title,
-  description,
-  action,
-}: {
-  eyebrow: string
-  title?: string
-  description?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-muted-foreground">{eyebrow}</p>
-        {title && (
-          <h1 className="mt-1 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
-            {title}
-          </h1>
-        )}
-        {description && (
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            {description}
-          </p>
-        )}
-      </div>
-      {action && <div className="shrink-0">{action}</div>}
     </div>
   )
 }
