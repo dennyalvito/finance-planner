@@ -41,7 +41,7 @@ const config = defineConfig(async ({ mode }) => ({
             ],
             manifest: {
               id: "/",
-              name: "Coin — Personal Finance Planner",
+              name: "Coin",
               short_name: "Coin",
               description:
                 "A private, local-first finance planner for income, expenses, and monthly budgets.",
