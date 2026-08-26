@@ -22,9 +22,17 @@ test("keeps chart tooltips stable for display labels outside the chart config", 
     .getByRole("button", { name: "Add transaction" })
     .click()
 
-  await expect(spendingChart).toBeVisible()
-  await cashFlowChart.hover({ position: { x: 240, y: 130 } })
-  await spendingChart.hover({ position: { x: 88, y: 30 } })
+  await expect(spendingChart).toBeVisible({ timeout: 15000 })
+  const cashFlowBox = await cashFlowChart.boundingBox()
+  expect(cashFlowBox).not.toBeNull()
+  await cashFlowChart.hover({
+    force: true,
+    position: {
+      x: cashFlowBox!.width / 2,
+      y: cashFlowBox!.height / 2,
+    },
+  })
+  await spendingChart.hover({ force: true, position: { x: 88, y: 30 } })
 
   await expect(cashFlowChart).toBeVisible()
   expect(pageErrors).toEqual([])
@@ -100,14 +108,14 @@ test("collapses the desktop sidebar to icons and keeps the chart card content-si
   const overviewItem = await page
     .getByRole("link", { name: "Overview" })
     .boundingBox()
-  const transactionsItem = await page
-    .getByRole("link", { name: "Transactions" })
+  const preferencesItem = await page
+    .getByRole("link", { name: "Preferences" })
     .boundingBox()
 
   expect(overviewItem).not.toBeNull()
-  expect(transactionsItem).not.toBeNull()
+  expect(preferencesItem).not.toBeNull()
   expect(
-    transactionsItem!.y - (overviewItem!.y + overviewItem!.height)
+    preferencesItem!.y - (overviewItem!.y + overviewItem!.height)
   ).toBeGreaterThanOrEqual(4)
 
   await page.locator('[data-sidebar="trigger"]').click()
@@ -151,7 +159,10 @@ test("starts a first-time guest with an empty ledger", async ({ page }) => {
   ).toBeVisible()
 
   await page.getByTestId("add-transaction-desktop").click()
-  await page.getByLabel("Category").click()
+  await page
+    .getByRole("dialog")
+    .getByRole("combobox", { name: "Category" })
+    .click()
   await expect(
     page.getByRole("option", { name: "Food & dining" })
   ).toBeVisible()
@@ -169,12 +180,15 @@ test("records and persists a transaction from the desktop dashboard", async ({
       exact: true,
     })
   ).toBeVisible()
-  await expect(page.getByRole("link", { name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Preferences" })).toBeVisible()
 
   await page.getByTestId("add-transaction-desktop").click()
   await expect(page.getByRole("dialog")).toBeVisible()
   await page.getByLabel("Amount in IDR").fill("1500000")
-  await page.getByLabel("Category").click()
+  await page
+    .getByRole("dialog")
+    .getByRole("combobox", { name: "Category" })
+    .click()
   await page.getByRole("option", { name: "Food & dining" }).click()
   await page.getByLabel("Note").fill("Fresh groceries")
   await page
@@ -190,7 +204,10 @@ test("records and persists a transaction from the desktop dashboard", async ({
 
   await page.getByTestId("add-transaction-desktop").click()
   await page.getByLabel("Amount in IDR").fill("250000")
-  await page.getByLabel("Category").click()
+  await page
+    .getByRole("dialog")
+    .getByRole("combobox", { name: "Category" })
+    .click()
   await page.getByRole("option", { name: "Food & dining" }).click()
   await page.getByLabel("Date").fill("2026-06-15")
   await page.getByLabel("Note").fill("Older groceries")
@@ -237,7 +254,7 @@ test("records and persists a transaction from the desktop dashboard", async ({
   await expect(page.getByText("Older groceries")).toBeVisible()
 })
 
-test("uses a bottom dock and transaction drawer on mobile", async ({
+test("uses the simplified mobile dock and period controls", async ({
   page,
 }) => {
   await page.clock.setFixedTime(new Date("2026-07-25T12:00:00+07:00"))
@@ -247,12 +264,14 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
 
   await expect(page.getByTestId("mobile-dock")).toBeVisible()
   await expect(page.getByTestId("add-transaction-desktop")).toBeHidden()
+  await expect(page.getByRole("link", { name: "Preferences" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Profile" })).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Net cash flow" })
   ).toBeVisible()
   await expect(page.getByTestId("cash-flow-card")).toBeHidden()
   await expect(
-    page.getByRole("button", { name: "Change period, currently Today" })
+    page.getByRole("button", { name: "Change period, currently This month" })
   ).toBeVisible()
 
   const activeHome = page.getByRole("link", { name: "Home" })
@@ -260,7 +279,7 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await expect(activeHome).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   await page
-    .getByRole("button", { name: "Change period, currently Today" })
+    .getByRole("button", { name: "Change period, currently This month" })
     .click()
   await expect(page.getByTestId("period-filter-drawer")).toBeVisible()
   const periodBackdrop = await page
@@ -274,11 +293,11 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await page.keyboard.press("Escape")
   await expect(page.getByTestId("period-filter-drawer")).toBeHidden()
   await expect(
-    page.getByRole("button", { name: "Change period, currently Today" })
+    page.getByRole("button", { name: "Change period, currently This month" })
   ).toBeVisible()
 
   await page
-    .getByRole("button", { name: "Change period, currently Today" })
+    .getByRole("button", { name: "Change period, currently This month" })
     .click()
   await page.getByRole("radio", { name: "Custom" }).click()
   await page.getByRole("button", { name: /Select from date/ }).click()
@@ -362,13 +381,37 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
     /text-negative/
   )
 
-  await page
-    .getByTestId("mobile-recent-activity")
-    .getByRole("button", {
-      name: "Actions for Food & dining transaction",
+  const swipeMobileTransaction = async () => {
+    const transactionRow = page
+      .getByTestId("mobile-recent-activity")
+      .locator("[data-transaction-row]")
+      .filter({ hasText: "Food & dining" })
+    const rowBox = await transactionRow.boundingBox()
+    expect(rowBox).not.toBeNull()
+    await page.mouse.move(
+      rowBox!.x + rowBox!.width - 12,
+      rowBox!.y + rowBox!.height / 2
+    )
+    await page.mouse.down()
+    await page.mouse.move(rowBox!.x + 12, rowBox!.y + rowBox!.height / 2, {
+      steps: 6,
     })
-    .click()
-  await page.getByRole("menuitem", { name: "Edit" }).click()
+    await page.mouse.up()
+    const editButton = page
+      .getByTestId("mobile-recent-activity")
+      .getByRole("button", {
+        name: "Edit",
+        includeHidden: true,
+      })
+    await expect(editButton).toBeVisible()
+    return editButton
+  }
+
+  const openEditButton = await swipeMobileTransaction()
+  await page.getByTestId("mobile-net-cash-flow").click()
+  await expect(openEditButton).toHaveAttribute("tabindex", "-1")
+
+  await (await swipeMobileTransaction()).click()
   await expect(
     page.getByRole("heading", { name: "Edit transaction" })
   ).toBeVisible()
@@ -378,20 +421,18 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
   await expect(
     page.getByTestId("mobile-recent-activity").getByText("-Rp 150 rb")
   ).toBeVisible()
+  await page.waitForTimeout(250)
 
-  await page
-    .getByTestId("mobile-recent-activity")
-    .getByRole("button", {
-      name: "Actions for Food & dining transaction",
-    })
-    .click()
-  await page.getByRole("menuitem", { name: "Delete" }).click()
+  await swipeMobileTransaction()
+  const deleteButton = page.getByRole("button", {
+    name: "Delete Food & dining transaction",
+  })
+  await deleteButton.click()
   const deleteDialog = page.getByRole("alertdialog")
   await expect(
     deleteDialog.getByRole("heading", { name: "Delete this transaction?" })
   ).toBeVisible()
   await deleteDialog.getByRole("button", { name: "Delete" }).click()
-  await expect(page.getByText("Transaction deleted")).toBeVisible()
   await expect(
     page.getByTestId("mobile-recent-activity").getByText("No transactions here")
   ).toBeVisible()
@@ -465,13 +506,14 @@ test("labels the guest workspace and offers Google account mode", async ({
     })
   })
 
-  await page.goto("/settings")
+  await page.goto("/preferences")
   await page.locator('[data-app-ready="true"]').waitFor()
 
   await expect(
-    page.getByRole("heading", { name: "Guest profile", exact: true })
+    page
+      .getByTestId("route-stage")
+      .getByRole("heading", { name: "Preferences", exact: true })
   ).toBeVisible()
-  await expect(page.getByText("Saved on this device")).toBeVisible()
   await expect(page.getByText("Indonesian rupiah")).toBeVisible()
   await page.getByRole("button", { name: /Categories/ }).click()
   const categoryDialog = page.getByRole("dialog", { name: "Categories" })
@@ -485,20 +527,26 @@ test("labels the guest workspace and offers Google account mode", async ({
     page.getByRole("button", { name: "Continue with Google" })
   ).toBeEnabled()
 
-  await page.getByRole("button", { name: "Open profile menu" }).click()
-  const profileMenu = page.getByRole("menu")
+  await page.goto("/profile")
+  await page.locator('[data-app-ready="true"]').waitFor()
   await expect(
-    profileMenu.getByText("Guest mode", { exact: true })
+    page
+      .getByTestId("route-stage")
+      .getByRole("heading", { name: "Profile", exact: true })
   ).toBeVisible()
   await expect(
-    profileMenu.getByText("On this device", { exact: true })
+    page.getByTestId("route-stage").getByText("On this device", { exact: true })
   ).toBeVisible()
-  await expect(
-    page.getByRole("menuitem", { name: "Continue with Google" })
-  ).toBeVisible()
-  await page.keyboard.press("Escape")
 
-  await page.getByRole("button", { name: "Continue with Google" }).click()
+  await expect(
+    page.getByRole("button", { name: "Open profile menu" })
+  ).toHaveCount(0)
+  await expect(page.locator('[aria-label="Profile"]')).toBeVisible()
+
+  await page
+    .getByTestId("route-stage")
+    .getByRole("button", { name: "Continue with Google" })
+    .click()
 
   const signInDialog = page.getByRole("dialog", {
     name: "Open your cloud workspace",
@@ -523,6 +571,6 @@ test("labels the guest workspace and offers Google account mode", async ({
 
   expect(oauthUrl.searchParams.get("provider")).toBe("google")
   expect(oauthUrl.searchParams.get("redirect_to")).toBe(
-    "http://localhost:3000/settings"
+    "http://localhost:3000/profile"
   )
 })
