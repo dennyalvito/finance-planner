@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBudgetsRouteImport } from './routes/_app/budgets'
+import { Route as AppPreferencesRouteImport } from './routes/_app/preferences'
+import { Route as AppProfileRouteImport } from './routes/_app/profile'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTransactionsRouteImport } from './routes/_app/transactions'
 
@@ -29,6 +31,16 @@ const AppBudgetsRoute = AppBudgetsRouteImport.update({
   path: '/budgets',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPreferencesRoute = AppPreferencesRouteImport.update({
+  id: '/preferences',
+  path: '/preferences',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -43,11 +55,15 @@ const AppTransactionsRoute = AppTransactionsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/budgets': typeof AppBudgetsRoute
+  '/preferences': typeof AppPreferencesRoute
+  '/profile': typeof AppProfileRoute
   '/settings': typeof AppSettingsRoute
   '/transactions': typeof AppTransactionsRoute
 }
 export interface FileRoutesByTo {
   '/budgets': typeof AppBudgetsRoute
+  '/preferences': typeof AppPreferencesRoute
+  '/profile': typeof AppProfileRoute
   '/settings': typeof AppSettingsRoute
   '/transactions': typeof AppTransactionsRoute
   '/': typeof AppIndexRoute
@@ -56,19 +72,35 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/_app/budgets': typeof AppBudgetsRoute
+  '/_app/preferences': typeof AppPreferencesRoute
+  '/_app/profile': typeof AppProfileRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/transactions': typeof AppTransactionsRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/budgets' | '/settings' | '/transactions'
+  fullPaths:
+    | '/'
+    | '/budgets'
+    | '/preferences'
+    | '/profile'
+    | '/settings'
+    | '/transactions'
   fileRoutesByTo: FileRoutesByTo
-  to: '/budgets' | '/settings' | '/transactions' | '/'
+  to:
+    | '/budgets'
+    | '/preferences'
+    | '/profile'
+    | '/settings'
+    | '/transactions'
+    | '/'
   id:
     | '__root__'
     | '/_app'
     | '/_app/budgets'
+    | '/_app/preferences'
+    | '/_app/profile'
     | '/_app/settings'
     | '/_app/transactions'
     | '/_app/'
@@ -101,6 +133,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBudgetsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/preferences': {
+      id: '/_app/preferences'
+      path: '/preferences'
+      fullPath: '/preferences'
+      preLoaderRoute: typeof AppPreferencesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
@@ -120,6 +166,8 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppBudgetsRoute: typeof AppBudgetsRoute
+  AppPreferencesRoute: typeof AppPreferencesRoute
+  AppProfileRoute: typeof AppProfileRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -127,6 +175,8 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppBudgetsRoute: AppBudgetsRoute,
+  AppPreferencesRoute: AppPreferencesRoute,
+  AppProfileRoute: AppProfileRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppTransactionsRoute: AppTransactionsRoute,
   AppIndexRoute: AppIndexRoute,

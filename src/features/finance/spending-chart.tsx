@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 
 const chartConfig = {
   value: {
-    label: "Spent",
+    label: "Amount",
   },
   first: { color: "var(--chart-1)" },
   second: { color: "var(--chart-2)" },
