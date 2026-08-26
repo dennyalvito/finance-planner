@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import { Link, Outlet, useLocation } from "@tanstack/react-router"
@@ -14,7 +15,6 @@ import {
   ArrowDownLeftIcon,
   ArrowUpRightIcon,
   CalendarDaysIcon,
-  ChartNoAxesCombinedIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CircleDollarSignIcon,
@@ -118,7 +118,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   buildCashFlowSeries,
   buildCategoryCashFlow,
-  buildCategorySpending,
   calculateBudgetProgress,
   formatCompactRupiah,
   formatRupiah,
@@ -190,7 +189,8 @@ function useOverviewChartsReady() {
   return ready
 }
 
-export type CoinView = "overview" | "transactions" | "budgets" | "settings"
+export type CoinView =
+  "overview" | "transactions" | "budgets" | "preferences" | "profile"
 
 const navigation: Array<{
   view: CoinView
@@ -207,13 +207,6 @@ const navigation: Array<{
     icon: LayoutDashboardIcon,
   },
   {
-    view: "transactions",
-    label: "Transactions",
-    shortLabel: "Activity",
-    to: "/transactions",
-    icon: ReceiptTextIcon,
-  },
-  {
     view: "budgets",
     label: "Budgets",
     shortLabel: "Budgets",
@@ -221,11 +214,18 @@ const navigation: Array<{
     icon: GaugeIcon,
   },
   {
-    view: "settings",
-    label: "Categories & settings",
-    shortLabel: "Profile",
-    to: "/settings",
+    view: "preferences",
+    label: "Preferences",
+    shortLabel: "Preferences",
+    to: "/preferences",
     icon: Settings2Icon,
+  },
+  {
+    view: "profile",
+    label: "Profile",
+    shortLabel: "Profile",
+    to: "/profile",
+    icon: UserRoundIcon,
   },
 ]
 
@@ -239,16 +239,38 @@ function getView(pathname: string): CoinView {
   }
 
   if (pathname.startsWith("/settings")) {
-    return "settings"
+    return "preferences"
+  }
+
+  if (pathname.startsWith("/preferences")) {
+    return "preferences"
+  }
+
+  if (pathname.startsWith("/profile")) {
+    return "profile"
   }
 
   return "overview"
+}
+
+const pageTitles: Record<CoinView, string> = {
+  overview: "Overview",
+  transactions: "Transactions",
+  budgets: "Budgets",
+  preferences: "Preferences",
+  profile: "Profile",
 }
 
 type CoinAppContextValue = ReturnType<typeof useFinance> & {
   openBudget: (categoryId?: string) => void
   openSignIn: () => void
   openTransaction: (transaction?: FinanceTransaction) => void
+  overviewCustomRange: DateRange
+  overviewPeriod: PeriodPreset
+  overviewPeriodOpen: boolean
+  setOverviewCustomRange: (range: DateRange) => void
+  setOverviewPeriod: (period: PeriodPreset) => void
+  setOverviewPeriodOpen: (open: boolean) => void
   requestSignOut: () => void
 }
 
@@ -362,6 +384,11 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   const [signInOpen, setSignInOpen] = useState(false)
   const [signOutOpen, setSignOutOpen] = useState(false)
   const [signOutPendingCount, setSignOutPendingCount] = useState(0)
+  const [overviewPeriod, setOverviewPeriod] = useState<PeriodPreset>("month")
+  const [overviewPeriodOpen, setOverviewPeriodOpen] = useState(false)
+  const [overviewCustomRange, setOverviewCustomRange] = useState<DateRange>(
+    () => getPeriodRange("month", { from: "", to: "" })
+  )
   const { openTransaction } = useTransactionOverlay()
   const openNewTransaction = useCallback(
     () => openTransaction(),
@@ -403,9 +430,24 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
       openBudget,
       openSignIn,
       openTransaction,
+      overviewCustomRange,
+      overviewPeriod,
+      overviewPeriodOpen,
+      setOverviewCustomRange,
+      setOverviewPeriod,
+      setOverviewPeriodOpen,
       requestSignOut,
     }),
-    [finance, openBudget, openSignIn, openTransaction, requestSignOut]
+    [
+      finance,
+      openBudget,
+      openSignIn,
+      openTransaction,
+      overviewCustomRange,
+      overviewPeriod,
+      overviewPeriodOpen,
+      requestSignOut,
+    ]
   )
 
   useEffect(() => {
@@ -415,7 +457,12 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   return (
     <CoinAppContext.Provider value={contextValue}>
       <SidebarProvider>
-        <CoinSidebar view={view} onAdd={openNewTransaction} />
+        <CoinSidebar
+          view={view}
+          onAdd={openNewTransaction}
+          onSignIn={openSignIn}
+          onSignOut={requestSignOut}
+        />
         <SidebarInset
           data-app-ready={appReady ? "true" : "false"}
           aria-busy={!appReady}
@@ -500,6 +547,12 @@ export function OverviewPage() {
       onBudget={finance.openBudget}
       onDelete={finance.deleteTransaction}
       onClearDemo={finance.clearDemoTransactions}
+      period={finance.overviewPeriod}
+      periodOpen={finance.overviewPeriodOpen}
+      customRange={finance.overviewCustomRange}
+      onPeriodOpenChange={finance.setOverviewPeriodOpen}
+      onPeriodChange={finance.setOverviewPeriod}
+      onCustomRangeChange={finance.setOverviewCustomRange}
     />
   )
 }
@@ -532,19 +585,33 @@ export function BudgetsPage() {
   )
 }
 
-export function SettingsPage() {
+export function PreferencesPage() {
   const finance = useCoinApp()
 
   return (
-    <SettingsView
+    <PreferencesView
       categories={finance.categories}
       onSignIn={finance.openSignIn}
-      onSignOut={finance.requestSignOut}
       onCreateCategory={finance.createCategory}
       onUpdateCategory={finance.updateCategory}
       onDeleteCategory={finance.deleteCategory}
     />
   )
+}
+
+export function ProfilePage() {
+  const finance = useCoinApp()
+
+  return (
+    <ProfileView
+      onSignIn={finance.openSignIn}
+      onSignOut={finance.requestSignOut}
+    />
+  )
+}
+
+export function SettingsPage() {
+  return <PreferencesPage />
 }
 
 function accountLabel(email?: string) {
@@ -556,7 +623,17 @@ function accountInitials(email?: string) {
   return email.slice(0, 2).toUpperCase()
 }
 
-function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
+function CoinSidebar({
+  view,
+  onAdd,
+  onSignIn,
+  onSignOut,
+}: {
+  view: CoinView
+  onAdd: () => void
+  onSignIn: () => void
+  onSignOut: () => void
+}) {
   const auth = useAuth()
   const cloudWorkspace = auth.status === "authenticated"
   const profile = cloudWorkspace ? accountLabel(auth.user?.email) : "Guest mode"
@@ -652,6 +729,27 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size="lg"
+              tooltip={cloudWorkspace ? "Sign out" : "Continue with Google"}
+              disabled={
+                !cloudWorkspace &&
+                (!auth.configured || auth.status === "loading")
+              }
+              onClick={cloudWorkspace ? onSignOut : onSignIn}
+              className="group-data-[collapsible=icon]:justify-center"
+            >
+              {cloudWorkspace ? (
+                <LogOutIcon aria-hidden="true" />
+              ) : (
+                <LogInIcon aria-hidden="true" />
+              )}
+              <span className="group-data-[collapsible=icon]:sr-only">
+                {cloudWorkspace ? "Sign out" : "Continue with Google"}
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
@@ -670,8 +768,7 @@ function AppHeader({
   onSignOut: () => void
 }) {
   const auth = useAuth()
-  const title =
-    navigation.find((item) => item.view === view)?.label ?? "Overview"
+  const title = pageTitles[view]
   const cloudWorkspace = auth.status === "authenticated"
   const profile = cloudWorkspace ? accountLabel(auth.user?.email) : "Guest mode"
 
@@ -687,7 +784,7 @@ function AppHeader({
         </div>
         <Separator orientation="vertical" className="hidden h-5 md:block" />
         <div className="hidden min-w-0 md:block">
-          <p className="truncate text-sm font-medium">{title}</p>
+          <h1 className="truncate text-sm font-medium">{title}</h1>
           <p className="truncate text-xs text-muted-foreground">
             A clear view of what you record
           </p>
@@ -719,21 +816,6 @@ function AppHeader({
                 {cloudWorkspace ? "Cloud workspace" : "On this device"}
               </span>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link to="/settings">
-                  <ShapesIcon />
-                  Categories
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/settings">
-                  <Settings2Icon />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               {cloudWorkspace ? (
@@ -795,7 +877,7 @@ function DockLink({
   item: (typeof navigation)[number]
   active: boolean
 }) {
-  const Icon = item.view === "settings" ? UserRoundIcon : item.icon
+  const Icon = item.icon
   return (
     <Link
       to={item.to}
@@ -918,27 +1000,34 @@ function OverviewView({
   onBudget,
   onDelete,
   onClearDemo,
+  period,
+  periodOpen,
+  customRange,
+  onPeriodOpenChange,
+  onPeriodChange,
+  onCustomRangeChange,
 }: FinanceViewProps & {
   onAdd: () => void
   onEdit: (transaction: FinanceTransaction) => void
   onBudget: () => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
+  period: PeriodPreset
+  periodOpen: boolean
+  customRange: DateRange
+  onPeriodOpenChange: (open: boolean) => void
+  onPeriodChange: (period: PeriodPreset) => void
+  onCustomRangeChange: (range: DateRange) => void
 }) {
   const isMobile = useIsMobile()
   const chartsReady = useOverviewChartsReady()
-  const [period, setPeriod] = useState<PeriodPreset>("day")
-  const [periodOpen, setPeriodOpen] = useState(false)
-  const initialCustomRange = useMemo(
-    () => getPeriodRange("month", { from: "", to: "" }),
-    []
-  )
-  const [customRange, setCustomRange] = useState<DateRange>(initialCustomRange)
+  const [categoryDetailOpen, setCategoryDetailOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
   const activeRange = useMemo(
     () => getPeriodRange(period, customRange),
     [customRange, period]
   )
-  const mobileTransactions = useMemo(
+  const periodTransactions = useMemo(
     () =>
       transactions.filter(
         (transaction) =>
@@ -947,48 +1036,46 @@ function OverviewView({
       ),
     [activeRange, transactions]
   )
-  const summary = useMemo(() => summarizeLedger(transactions), [transactions])
-  const mobileSummary = useMemo(
-    () => summarizeLedger(mobileTransactions),
-    [mobileTransactions]
+  const summary = useMemo(
+    () => summarizeLedger(periodTransactions),
+    [periodTransactions]
   )
   const series = useMemo(
     () => (chartsReady ? buildCashFlowSeries(transactions) : []),
     [chartsReady, transactions]
   )
-  const spending = useMemo(
-    () => (chartsReady ? buildCategorySpending(transactions, categories) : []),
-    [categories, chartsReady, transactions]
-  )
-  const mobileCashFlow = useMemo(
+  const categoryFlow = useMemo(
     () =>
-      chartsReady ? buildCategoryCashFlow(mobileTransactions, categories) : [],
-    [categories, chartsReady, mobileTransactions]
+      chartsReady ? buildCategoryCashFlow(periodTransactions, categories) : [],
+    [categories, chartsReady, periodTransactions]
   )
   const budget = useMemo(
     () => calculateBudgetProgress(transactions, budgets),
     [transactions, budgets]
   )
-  const topCategoryName = spending.length > 0 ? spending[0].name : "No expenses"
+  const periodLabel = getPeriodLabel(
+    period,
+    period === "custom" ? customRange : activeRange
+  )
+  const openCategoryDetails = () => setCategoryDetailOpen(true)
+  const openActivity = () => setActivityOpen(true)
+  const handleActivityEdit = (transaction: FinanceTransaction) => {
+    setActivityOpen(false)
+    onEdit(transaction)
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <MobileOverview
         categories={categories}
-        transactions={mobileTransactions}
-        summary={mobileSummary}
-        cashFlow={mobileCashFlow}
+        transactions={periodTransactions}
+        summary={summary}
+        cashFlow={categoryFlow}
         chartsReady={chartsReady && isMobile}
-        period={period}
-        periodLabel={getPeriodLabel(
-          period,
-          period === "custom" ? customRange : activeRange
-        )}
-        periodOpen={periodOpen}
-        customRange={customRange}
-        onPeriodOpenChange={setPeriodOpen}
-        onPeriodChange={setPeriod}
-        onCustomRangeChange={setCustomRange}
+        periodLabel={periodLabel}
+        onPeriodOpenChange={onPeriodOpenChange}
+        onOpenCategoryDetails={openCategoryDetails}
+        onViewAll={openActivity}
         onEdit={onEdit}
         onDelete={onDelete}
       />
@@ -1006,7 +1093,16 @@ function OverviewView({
               <CardTitle>Net cash flow</CardTitle>
               <CardDescription>Income minus expenses</CardDescription>
               <CardAction>
-                <ChartNoAxesCombinedIcon aria-hidden="true" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={"Change period, currently " + periodLabel}
+                  onClick={() => onPeriodOpenChange(true)}
+                >
+                  <CalendarDaysIcon data-icon="inline-start" />
+                  {periodLabel}
+                  <ChevronDownIcon data-icon="inline-end" />
+                </Button>
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -1044,8 +1140,8 @@ function OverviewView({
           />
         </section>
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,0.8fr)]">
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.95fr)]">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
             <Card
               data-testid="cash-flow-card"
               aria-busy={!chartsReady}
@@ -1071,31 +1167,61 @@ function OverviewView({
               </CardContent>
             </Card>
 
-            <Card aria-busy={!chartsReady}>
+            <Card
+              data-testid="desktop-category-card"
+              aria-busy={!chartsReady}
+              role="button"
+              tabIndex={0}
+              aria-label="Open category activity details"
+              className="cursor-pointer transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              onClick={openCategoryDetails}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  openCategoryDetails()
+                }
+              }}
+            >
               <CardHeader>
-                <CardTitle>Spending overview</CardTitle>
+                <CardTitle>Category activity</CardTitle>
                 <CardDescription>
-                  Where expenses are concentrated.
+                  Income and expenses in {periodLabel.toLowerCase()}.
                 </CardDescription>
+                <CardAction>
+                  <ChevronRightIcon aria-hidden="true" />
+                </CardAction>
               </CardHeader>
-              <CardContent>
+              <CardContent className="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-3">
                 {chartsReady && !isMobile ? (
                   <Suspense fallback={<SpendingSkeleton />}>
-                    <SpendingChart data={spending} />
+                    <SpendingChart
+                      data={categoryFlow}
+                      compact
+                      centerLabel="Net"
+                      centerValue={summary.net}
+                      centerTone={
+                        summary.net > 0
+                          ? "positive"
+                          : summary.net < 0
+                            ? "negative"
+                            : "default"
+                      }
+                    />
                   </Suspense>
                 ) : (
-                  <SpendingSkeleton />
+                  <SpendingSkeleton compact />
                 )}
+                <CategoryFlowLegend items={categoryFlow} />
               </CardContent>
               <CardFooter className="justify-between">
                 <span className="text-sm text-muted-foreground">
-                  Top category
+                  {categoryFlow.length}{" "}
+                  {categoryFlow.length === 1 ? "category" : "categories"}
                 </span>
-                {chartsReady && !isMobile ? (
-                  <span className="text-sm font-medium">{topCategoryName}</span>
-                ) : (
-                  <Skeleton aria-hidden="true" className="h-4 w-20" />
-                )}
+                <span className="flex items-center gap-1 text-sm font-medium">
+                  View details
+                  <ChevronRightIcon aria-hidden="true" className="size-4" />
+                </span>
               </CardFooter>
             </Card>
 
@@ -1135,15 +1261,41 @@ function OverviewView({
             <QuickActions onAdd={onAdd} onBudget={onBudget} />
             <RecentTransactions
               categories={categories}
-              transactions={transactions.slice(0, 5)}
-              onEdit={onEdit}
+              transactions={periodTransactions.slice(0, 5)}
+              onEdit={handleActivityEdit}
               onDelete={onDelete}
               onClearDemo={onClearDemo}
+              onViewAll={openActivity}
               compact
             />
           </div>
         </div>
       </div>
+      <PeriodFilterDrawer
+        open={periodOpen}
+        period={period}
+        customRange={customRange}
+        onOpenChange={onPeriodOpenChange}
+        onPeriodChange={onPeriodChange}
+        onCustomRangeChange={onCustomRangeChange}
+      />
+      <CategoryDetailOverlay
+        open={categoryDetailOpen}
+        onOpenChange={setCategoryDetailOpen}
+        periodLabel={periodLabel}
+        categoryFlow={categoryFlow}
+        summary={summary}
+      />
+      <ActivityHistoryOverlay
+        open={activityOpen}
+        onOpenChange={setActivityOpen}
+        categories={categories}
+        transactions={transactions}
+        onAdd={onAdd}
+        onEdit={handleActivityEdit}
+        onDelete={onDelete}
+        onClearDemo={onClearDemo}
+      />
     </div>
   )
 }
@@ -1156,19 +1308,292 @@ const chartDotClasses = [
   "bg-chart-5",
 ]
 
+function CategoryFlowLegend({
+  items,
+  limit = 5,
+}: {
+  items: CategoryCashFlow[]
+  limit?: number
+}) {
+  if (!items.length) {
+    return (
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Add income or an expense to see its category share.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      {items.slice(0, limit).map((item, index) => {
+        const Icon = getCategoryIcon(item.categoryId)
+        return (
+          <div
+            key={item.type + ":" + item.categoryId}
+            className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2"
+          >
+            <span className="relative flex size-7 items-center justify-center rounded-lg bg-muted">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "absolute top-1 right-1 size-1.5 rounded-full",
+                  chartDotClasses[index % chartDotClasses.length]
+                )}
+              />
+              <Icon aria-hidden="true" className="size-3.5" />
+            </span>
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
+              {item.name}
+            </span>
+            <span
+              className={cn(
+                "text-xs font-medium tabular-nums",
+                item.type === "income" ? "text-positive" : "text-negative"
+              )}
+            >
+              {item.type === "income" ? "+" : "-"}
+              {formatCompactRupiah(item.value)}
+            </span>
+          </div>
+        )
+      })}
+      {items.length > limit && (
+        <p className="text-xs text-muted-foreground">
+          +{items.length - limit} more categories
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ResponsiveOverlay({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  className,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  description: string
+  children: React.ReactNode
+  className?: string
+}) {
+  const isMobile = useIsMobile()
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent
+          className="max-h-[92svh] overflow-hidden"
+          data-testid="responsive-drawer"
+        >
+          <DrawerHeader className="shrink-0 pb-3">
+            <DrawerTitle>{title}</DrawerTitle>
+            <DrawerDescription>{description}</DrawerDescription>
+          </DrawerHeader>
+          <div
+            className={cn(
+              "min-h-0 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]",
+              className
+            )}
+          >
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[88svh] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0">
+        <DialogHeader className="shrink-0 pb-4">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div className={cn("min-h-0 overflow-y-auto", className)}>
+          {children}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CategoryDetailOverlay({
+  open,
+  onOpenChange,
+  periodLabel,
+  categoryFlow,
+  summary,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  periodLabel: string
+  categoryFlow: CategoryCashFlow[]
+  summary: LedgerSummary
+}) {
+  const income = categoryFlow.filter((item) => item.type === "income")
+  const expenses = categoryFlow.filter((item) => item.type === "expense")
+
+  return (
+    <ResponsiveOverlay
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Category activity"
+      description={
+        "Every category recorded in " + periodLabel.toLowerCase() + "."
+      }
+      className="flex flex-col gap-4 pb-4"
+    >
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-xl bg-muted/60 p-3">
+          <p className="text-xs text-muted-foreground">Categories</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">
+            {categoryFlow.length}
+          </p>
+        </div>
+        <div className="rounded-xl bg-muted/60 p-3">
+          <p className="text-xs text-muted-foreground">Money in</p>
+          <p className="mt-1 truncate text-sm font-semibold text-positive tabular-nums">
+            {formatCompactRupiah(summary.income)}
+          </p>
+        </div>
+        <div className="rounded-xl bg-muted/60 p-3">
+          <p className="text-xs text-muted-foreground">Money out</p>
+          <p className="mt-1 truncate text-sm font-semibold text-negative tabular-nums">
+            {formatCompactRupiah(summary.expenses)}
+          </p>
+        </div>
+      </div>
+      <CategoryBreakdownSection title="Income" items={income} />
+      <CategoryBreakdownSection title="Expenses" items={expenses} />
+    </ResponsiveOverlay>
+  )
+}
+
+function CategoryBreakdownSection({
+  title,
+  items,
+}: {
+  title: string
+  items: CategoryCashFlow[]
+}) {
+  const total = items.reduce((sum, item) => sum + item.value, 0)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardAction>
+          <Badge variant="secondary">{items.length}</Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {items.length ? (
+          items.map((item, index) => {
+            const Icon = getCategoryIcon(item.categoryId)
+            const percentage = total > 0 ? (item.value / total) * 100 : 0
+            return (
+              <div
+                key={item.type + ":" + item.categoryId}
+                className="flex gap-3"
+              >
+                <span className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary">
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "absolute top-1 right-1 size-1.5 rounded-full",
+                      chartDotClasses[index % chartDotClasses.length]
+                    )}
+                  />
+                  <Icon aria-hidden="true" className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-medium">{item.name}</p>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums">
+                      {formatCompactRupiah(item.value)}
+                    </p>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <Progress
+                      value={percentage}
+                      aria-label={
+                        item.name + " share of " + title.toLowerCase()
+                      }
+                      className="h-1.5"
+                    />
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {Math.round(percentage)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No {title.toLowerCase()} recorded in this period.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ActivityHistoryOverlay({
+  open,
+  onOpenChange,
+  categories,
+  transactions,
+  onAdd,
+  onEdit,
+  onDelete,
+  onClearDemo,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  categories: Category[]
+  transactions: FinanceTransaction[]
+  onAdd: () => void
+  onEdit: (transaction: FinanceTransaction) => void
+  onDelete: (id: string) => Promise<void>
+  onClearDemo: () => Promise<void>
+}) {
+  return (
+    <ResponsiveOverlay
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Ledger activity"
+      description="Review, filter, edit, or delete every recorded entry."
+      className="pb-4"
+    >
+      <TransactionsView
+        categories={categories}
+        transactions={transactions}
+        onAdd={onAdd}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onClearDemo={onClearDemo}
+        embedded
+      />
+    </ResponsiveOverlay>
+  )
+}
+
 function MobileOverview({
   categories,
   transactions,
   summary,
   cashFlow,
   chartsReady,
-  period,
   periodLabel,
-  periodOpen,
-  customRange,
   onPeriodOpenChange,
-  onPeriodChange,
-  onCustomRangeChange,
+  onOpenCategoryDetails,
+  onViewAll,
   onEdit,
   onDelete,
 }: {
@@ -1177,13 +1602,10 @@ function MobileOverview({
   summary: LedgerSummary
   cashFlow: CategoryCashFlow[]
   chartsReady: boolean
-  period: PeriodPreset
   periodLabel: string
-  periodOpen: boolean
-  customRange: DateRange
   onPeriodOpenChange: (open: boolean) => void
-  onPeriodChange: (period: PeriodPreset) => void
-  onCustomRangeChange: (range: DateRange) => void
+  onOpenCategoryDetails: () => void
+  onViewAll: () => void
   onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
 }) {
@@ -1239,10 +1661,28 @@ function MobileOverview({
         </CardFooter>
       </Card>
 
-      <Card aria-busy={!chartsReady}>
+      <Card
+        aria-busy={!chartsReady}
+        role="button"
+        tabIndex={0}
+        aria-label="Open category activity details"
+        className="cursor-pointer transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        onClick={onOpenCategoryDetails}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            onOpenCategoryDetails()
+          }
+        }}
+      >
         <CardHeader>
-          <CardTitle>Cash flow</CardTitle>
-          <CardDescription>{periodLabel}</CardDescription>
+          <CardTitle>Category activity</CardTitle>
+          <CardDescription>
+            Income and expenses in {periodLabel.toLowerCase()}.
+          </CardDescription>
+          <CardAction>
+            <ChevronRightIcon aria-hidden="true" />
+          </CardAction>
         </CardHeader>
         <CardContent className="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-3">
           {chartsReady ? (
@@ -1265,45 +1705,7 @@ function MobileOverview({
           ) : (
             <SpendingSkeleton compact />
           )}
-          <div className="flex min-w-0 flex-col gap-2">
-            {cashFlow.slice(0, 5).map((item, index) => {
-              const Icon = getCategoryIcon(item.categoryId)
-              return (
-                <div
-                  key={`${item.type}:${item.categoryId}`}
-                  className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2"
-                >
-                  <span className="relative flex size-7 items-center justify-center rounded-lg bg-muted">
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "absolute top-1 right-1 size-1.5 rounded-full",
-                        chartDotClasses[index]
-                      )}
-                    />
-                    <Icon aria-hidden="true" className="size-3.5" />
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {item.name}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xs font-medium tabular-nums",
-                      item.type === "income" ? "text-positive" : "text-negative"
-                    )}
-                  >
-                    {item.type === "income" ? "+" : "-"}
-                    {formatCompactRupiah(item.value)}
-                  </span>
-                </div>
-              )
-            })}
-            {chartsReady && !cashFlow.length && (
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Add income or an expense to see its category share.
-              </p>
-            )}
-          </div>
+          <CategoryFlowLegend items={cashFlow} />
         </CardContent>
       </Card>
 
@@ -1312,8 +1714,8 @@ function MobileOverview({
           <CardTitle>Recent activity</CardTitle>
           <CardDescription>Within {periodLabel.toLowerCase()}</CardDescription>
           <CardAction>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/transactions">See all</Link>
+            <Button variant="ghost" size="sm" onClick={onViewAll}>
+              See all
             </Button>
           </CardAction>
         </CardHeader>
@@ -1327,20 +1729,165 @@ function MobileOverview({
           />
         </CardContent>
       </Card>
-
-      <PeriodFilterDrawer
-        open={periodOpen}
-        period={period}
-        customRange={customRange}
-        onOpenChange={onPeriodOpenChange}
-        onPeriodChange={onPeriodChange}
-        onCustomRangeChange={onCustomRangeChange}
-      />
     </section>
   )
 }
 
 function PeriodFilterDrawer({
+  open,
+  period,
+  customRange,
+  onOpenChange,
+  onPeriodChange,
+  onCustomRangeChange,
+}: {
+  open: boolean
+  period: PeriodPreset
+  customRange: DateRange
+  onOpenChange: (open: boolean) => void
+  onPeriodChange: (period: PeriodPreset) => void
+  onCustomRangeChange: (range: DateRange) => void
+}) {
+  const isMobile = useIsMobile()
+  const [draftPeriod, setDraftPeriod] = useState<PeriodPreset>(period)
+  const [draftRange, setDraftRange] = useState<DateRange>(customRange)
+  const [activeDateField, setActiveDateField] = useState<"from" | "to" | null>(
+    null
+  )
+  const customRangeInvalid =
+    !draftRange.from || !draftRange.to || draftRange.from > draftRange.to
+
+  useEffect(() => {
+    if (!open) return
+    setDraftPeriod(period)
+    setDraftRange(customRange)
+  }, [customRange, open, period])
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setActiveDateField(null)
+    onOpenChange(nextOpen)
+  }
+
+  if (!isMobile) {
+    return (
+      <PeriodFilterDialog
+        open={open}
+        period={period}
+        customRange={customRange}
+        onOpenChange={onOpenChange}
+        onPeriodChange={onPeriodChange}
+        onCustomRangeChange={onCustomRangeChange}
+      />
+    )
+  }
+
+  return (
+    <>
+      <Drawer open={open} onOpenChange={handleOpenChange}>
+        <DrawerContent
+          data-testid="period-filter-drawer"
+          className="gap-0 overflow-hidden data-[vaul-drawer-direction=bottom]:max-h-[92svh]"
+        >
+          <DrawerHeader className="shrink-0 pb-3">
+            <DrawerTitle>Choose a period</DrawerTitle>
+            <DrawerDescription>
+              The summary, category chart, and recent activity update together.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="min-h-0 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <ToggleGroup
+              type="single"
+              value={draftPeriod}
+              variant="outline"
+              className="grid w-full grid-cols-2"
+              onValueChange={(value) => {
+                if (!value) return
+                const nextPeriod = value as PeriodPreset
+                if (nextPeriod === "custom") {
+                  if (draftPeriod !== "custom") {
+                    setDraftRange({ from: "", to: "" })
+                  }
+                  setDraftPeriod(nextPeriod)
+                  return
+                }
+                onPeriodChange(nextPeriod)
+                handleOpenChange(false)
+              }}
+            >
+              {periodOptions.map((option) => (
+                <ToggleGroupItem
+                  key={option.value}
+                  value={option.value}
+                  className="w-full last:col-span-2"
+                >
+                  {option.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+
+            <Collapsible open={draftPeriod === "custom"}>
+              <CollapsibleContent className="coin-collapsible-content">
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+                    aria-label={`Select from date, currently ${formatPeriodDate(draftRange.from)}`}
+                    onClick={() => setActiveDateField("from")}
+                  >
+                    <span className="text-xs font-normal text-muted-foreground">
+                      From
+                    </span>
+                    <span className="w-full truncate text-left font-medium">
+                      {formatPeriodDate(draftRange.from)}
+                    </span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+                    aria-label={`Select to date, currently ${formatPeriodDate(draftRange.to)}`}
+                    onClick={() => setActiveDateField("to")}
+                  >
+                    <span className="text-xs font-normal text-muted-foreground">
+                      To
+                    </span>
+                    <span className="w-full truncate text-left font-medium">
+                      {formatPeriodDate(draftRange.to)}
+                    </span>
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+          {draftPeriod === "custom" && (
+            <DrawerFooter className="shrink-0 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <Button
+                className="w-full"
+                disabled={customRangeInvalid}
+                onClick={() => {
+                  onCustomRangeChange(draftRange)
+                  onPeriodChange("custom")
+                  handleOpenChange(false)
+                }}
+              >
+                Apply custom period
+              </Button>
+            </DrawerFooter>
+          )}
+        </DrawerContent>
+      </Drawer>
+      <PeriodDateDialog
+        field={activeDateField}
+        customRange={draftRange}
+        onFieldChange={setActiveDateField}
+        onCustomRangeChange={setDraftRange}
+      />
+    </>
+  )
+}
+
+function PeriodFilterDialog({
   open,
   period,
   customRange,
@@ -1375,106 +1922,112 @@ function PeriodFilterDrawer({
   }
 
   return (
-    <Drawer open={open} onOpenChange={handleOpenChange}>
-      <DrawerContent
-        data-testid="period-filter-drawer"
-        className="gap-0 overflow-hidden data-[vaul-drawer-direction=bottom]:max-h-[92svh]"
-      >
-        <DrawerHeader className="shrink-0 pb-3">
-          <DrawerTitle>Choose a period</DrawerTitle>
-          <DrawerDescription>
-            The summary, category chart, and recent activity update together.
-          </DrawerDescription>
-        </DrawerHeader>
-        <div className="min-h-0 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <ToggleGroup
-            type="single"
-            value={draftPeriod}
-            variant="outline"
-            className="grid w-full grid-cols-2"
-            onValueChange={(value) => {
-              if (!value) return
-              const nextPeriod = value as PeriodPreset
-              if (nextPeriod === "custom") {
-                if (draftPeriod !== "custom") {
-                  setDraftRange({ from: "", to: "" })
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          data-testid="period-filter-dialog"
+          className="sm:max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>Choose a period</DialogTitle>
+            <DialogDescription>
+              The summary, category chart, and recent activity update together.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 px-4 pb-4">
+            <ToggleGroup
+              type="single"
+              value={draftPeriod}
+              variant="outline"
+              className="grid w-full grid-cols-2"
+              onValueChange={(value) => {
+                if (!value) return
+                const nextPeriod = value as PeriodPreset
+                if (nextPeriod === "custom") {
+                  if (draftPeriod !== "custom") {
+                    setDraftRange({ from: "", to: "" })
+                  }
+                  setDraftPeriod(nextPeriod)
+                  return
                 }
-                setDraftPeriod(nextPeriod)
-                return
-              }
-              onPeriodChange(nextPeriod)
-              handleOpenChange(false)
-            }}
-          >
-            {periodOptions.map((option) => (
-              <ToggleGroupItem
-                key={option.value}
-                value={option.value}
-                className="w-full last:col-span-2"
-              >
-                {option.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-
-          <Collapsible open={draftPeriod === "custom"}>
-            <CollapsibleContent className="coin-collapsible-content">
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
-                  aria-label={`Select from date, currently ${formatPeriodDate(draftRange.from)}`}
-                  onClick={() => setActiveDateField("from")}
-                >
-                  <span className="text-xs font-normal text-muted-foreground">
-                    From
-                  </span>
-                  <span className="w-full truncate text-left font-medium">
-                    {formatPeriodDate(draftRange.from)}
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
-                  aria-label={`Select to date, currently ${formatPeriodDate(draftRange.to)}`}
-                  onClick={() => setActiveDateField("to")}
-                >
-                  <span className="text-xs font-normal text-muted-foreground">
-                    To
-                  </span>
-                  <span className="w-full truncate text-left font-medium">
-                    {formatPeriodDate(draftRange.to)}
-                  </span>
-                </Button>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
-        {draftPeriod === "custom" && (
-          <DrawerFooter className="shrink-0 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button
-              className="w-full"
-              disabled={customRangeInvalid}
-              onClick={() => {
-                onCustomRangeChange(draftRange)
-                onPeriodChange("custom")
+                onPeriodChange(nextPeriod)
                 handleOpenChange(false)
               }}
             >
-              Apply custom period
-            </Button>
-          </DrawerFooter>
-        )}
-        <PeriodDateDialog
-          field={activeDateField}
-          customRange={draftRange}
-          onFieldChange={setActiveDateField}
-          onCustomRangeChange={setDraftRange}
-        />
-      </DrawerContent>
-    </Drawer>
+              {periodOptions.map((option) => (
+                <ToggleGroupItem
+                  key={option.value}
+                  value={option.value}
+                  className="w-full last:col-span-2"
+                >
+                  {option.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+
+            <Collapsible open={draftPeriod === "custom"}>
+              <CollapsibleContent className="coin-collapsible-content">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+                    aria-label={
+                      "Select from date, currently " +
+                      formatPeriodDate(draftRange.from)
+                    }
+                    onClick={() => setActiveDateField("from")}
+                  >
+                    <span className="text-xs font-normal text-muted-foreground">
+                      From
+                    </span>
+                    <span className="w-full truncate text-left font-medium">
+                      {formatPeriodDate(draftRange.from)}
+                    </span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-w-0 flex-col items-start gap-1 px-3 py-2.5"
+                    aria-label={
+                      "Select to date, currently " +
+                      formatPeriodDate(draftRange.to)
+                    }
+                    onClick={() => setActiveDateField("to")}
+                  >
+                    <span className="text-xs font-normal text-muted-foreground">
+                      To
+                    </span>
+                    <span className="w-full truncate text-left font-medium">
+                      {formatPeriodDate(draftRange.to)}
+                    </span>
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {draftPeriod === "custom" && (
+              <Button
+                disabled={customRangeInvalid}
+                onClick={() => {
+                  onCustomRangeChange(draftRange)
+                  onPeriodChange("custom")
+                  handleOpenChange(false)
+                }}
+              >
+                Apply custom period
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <PeriodDateDialog
+        field={activeDateField}
+        customRange={draftRange}
+        onFieldChange={setActiveDateField}
+        onCustomRangeChange={setDraftRange}
+      />
+    </>
   )
 }
 
@@ -1555,12 +2108,14 @@ function TransactionDateFilter({
   customRange,
   onOpenChange,
   onApply,
+  forceDialog = false,
 }: {
   open: boolean
   period: TransactionPeriod
   customRange: DateRange
   onOpenChange: (open: boolean) => void
   onApply: (period: TransactionPeriod, range: DateRange) => void
+  forceDialog?: boolean
 }) {
   const isMobile = useIsMobile()
   const [draftPeriod, setDraftPeriod] = useState<TransactionPeriod>(period)
@@ -1657,47 +2212,56 @@ function TransactionDateFilter({
           Apply date range
         </Button>
       )}
+    </div>
+  )
 
+  if (isMobile && !forceDialog) {
+    return (
+      <>
+        <Drawer open={open} onOpenChange={handleOpenChange}>
+          <DrawerContent data-testid="transaction-date-filter">
+            <DrawerHeader>
+              <DrawerTitle>Filter by date</DrawerTitle>
+              <DrawerDescription>
+                Choose the part of your ledger you want to review.
+              </DrawerDescription>
+            </DrawerHeader>
+            {controls}
+          </DrawerContent>
+        </Drawer>
+        <PeriodDateDialog
+          field={activeDateField}
+          customRange={draftRange}
+          onFieldChange={setActiveDateField}
+          onCustomRangeChange={setDraftRange}
+        />
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          data-testid="transaction-date-filter"
+          className="sm:max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>Filter by date</DialogTitle>
+            <DialogDescription>
+              Choose the part of your ledger you want to review.
+            </DialogDescription>
+          </DialogHeader>
+          {controls}
+        </DialogContent>
+      </Dialog>
       <PeriodDateDialog
         field={activeDateField}
         customRange={draftRange}
         onFieldChange={setActiveDateField}
         onCustomRangeChange={setDraftRange}
       />
-    </div>
-  )
-
-  if (isMobile) {
-    return (
-      <Drawer open={open} onOpenChange={handleOpenChange}>
-        <DrawerContent data-testid="transaction-date-filter">
-          <DrawerHeader>
-            <DrawerTitle>Filter by date</DrawerTitle>
-            <DrawerDescription>
-              Choose the part of your ledger you want to review.
-            </DrawerDescription>
-          </DrawerHeader>
-          {controls}
-        </DrawerContent>
-      </Drawer>
-    )
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        data-testid="transaction-date-filter"
-        className="sm:max-w-md"
-      >
-        <DialogHeader>
-          <DialogTitle>Filter by date</DialogTitle>
-          <DialogDescription>
-            Choose the part of your ledger you want to review.
-          </DialogDescription>
-        </DialogHeader>
-        {controls}
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }
 
@@ -1796,6 +2360,7 @@ function TransactionsView({
   onEdit,
   onDelete,
   onClearDemo,
+  embedded = false,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
@@ -1803,6 +2368,7 @@ function TransactionsView({
   onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
+  embedded?: boolean
 }) {
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">(
     "all"
@@ -1977,6 +2543,7 @@ function TransactionsView({
         open={dateFilterOpen}
         period={period}
         customRange={customRange}
+        forceDialog={embedded}
         onOpenChange={setDateFilterOpen}
         onApply={(nextPeriod, range) => {
           setPeriod(nextPeriod)
@@ -2022,6 +2589,7 @@ function RecentTransactions({
   onEdit,
   onDelete,
   onClearDemo,
+  onViewAll,
   compact,
 }: {
   categories: Category[]
@@ -2029,6 +2597,7 @@ function RecentTransactions({
   onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
+  onViewAll: () => void
   compact?: boolean
 }) {
   const hasDemo = transactions.some((transaction) => transaction.isDemo)
@@ -2038,8 +2607,8 @@ function RecentTransactions({
         <CardTitle>Recent transactions</CardTitle>
         <CardDescription>Your newest ledger entries.</CardDescription>
         <CardAction>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/transactions">View all</Link>
+          <Button variant="ghost" size="sm" onClick={onViewAll}>
+            View all
           </Button>
         </CardAction>
       </CardHeader>
@@ -2083,6 +2652,11 @@ function TransactionList({
   groupByDate?: boolean
   hideDelete?: boolean
 }) {
+  const isMobile = useIsMobile()
+  const [swipedTransactionId, setSwipedTransactionId] = useState<string | null>(
+    null
+  )
+
   if (!transactions.length) {
     return (
       <div className="flex min-h-44 flex-col items-center justify-center gap-2 text-center">
@@ -2105,9 +2679,8 @@ function TransactionList({
           (item) => item.id === transaction.categoryId
         )
         const Icon = getCategoryIcon(category?.name ?? "Other")
-        return (
+        const row = (
           <div
-            key={transaction.id}
             data-transaction-row
             className="group flex min-w-0 items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-muted"
           >
@@ -2158,20 +2731,38 @@ function TransactionList({
                 </p>
               )}
             </div>
-            {!hideDelete && onEdit ? (
+            {!isMobile && !hideDelete && onEdit ? (
               <TransactionActions
                 transaction={transaction}
                 categoryName={category?.name ?? "Other"}
                 onEdit={onEdit}
                 onDelete={onDelete}
               />
-            ) : !hideDelete ? (
+            ) : !isMobile && !hideDelete ? (
               <DeleteTransactionButton
                 transaction={transaction}
                 onDelete={onDelete}
               />
             ) : null}
           </div>
+        )
+
+        return isMobile ? (
+          <SwipeableTransactionRow
+            key={transaction.id}
+            open={swipedTransactionId === transaction.id}
+            onOpenChange={(open) =>
+              setSwipedTransactionId(open ? transaction.id : null)
+            }
+            transaction={transaction}
+            categoryName={category?.name ?? "Other"}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          >
+            {row}
+          </SwipeableTransactionRow>
+        ) : (
+          <div key={transaction.id}>{row}</div>
         )
       })}
     </div>
@@ -2223,6 +2814,98 @@ function TransactionList({
           </section>
         )
       })}
+    </div>
+  )
+}
+
+function SwipeableTransactionRow({
+  children,
+  open,
+  onOpenChange,
+  transaction,
+  categoryName,
+  onEdit,
+  onDelete,
+}: {
+  children: React.ReactNode
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  transaction: FinanceTransaction
+  categoryName: string
+  onEdit?: (transaction: FinanceTransaction) => void
+  onDelete: (id: string) => Promise<void>
+}) {
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
+
+  return (
+    <div className="relative overflow-hidden rounded-xl">
+      <div
+        aria-hidden={!open}
+        className="absolute inset-y-0 right-0 flex w-36 items-stretch gap-1 p-1"
+      >
+        {onEdit && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            tabIndex={open ? 0 : -1}
+            className="h-full flex-1 flex-col gap-1 px-2"
+            onClick={() => {
+              onOpenChange(false)
+              onEdit(transaction)
+            }}
+          >
+            <PencilIcon data-icon="inline-start" />
+            Edit
+          </Button>
+        )}
+        <DeleteTransactionDialog
+          transaction={transaction}
+          onDelete={onDelete}
+          trigger={
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                tabIndex={open ? 0 : -1}
+                className="h-full flex-1 flex-col gap-1 px-2"
+                aria-label={"Delete " + categoryName + " transaction"}
+              >
+                <Trash2Icon data-icon="inline-start" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+          }
+        />
+      </div>
+      <div
+        className={cn(
+          "relative touch-pan-y bg-background transition-transform duration-200 ease-out",
+          open && "-translate-x-36"
+        )}
+        onPointerDown={(event) => {
+          pointerStart.current = { x: event.clientX, y: event.clientY }
+        }}
+        onPointerUp={(event) => {
+          const start = pointerStart.current
+          pointerStart.current = null
+          if (!start) return
+
+          const deltaX = event.clientX - start.x
+          const deltaY = event.clientY - start.y
+          if (Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            onOpenChange(deltaX < 0)
+            return
+          }
+
+          if (open && Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) {
+            onOpenChange(false)
+          }
+        }}
+      >
+        {children}
+      </div>
     </div>
   )
 }
@@ -2387,6 +3070,9 @@ function BudgetsView({
 
   return (
     <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold tracking-[-0.03em] md:hidden">
+        Budgets
+      </h1>
       <Card className="bg-primary text-primary-foreground">
         <CardHeader>
           <CardTitle>Monthly breathing room</CardTitle>
@@ -2497,7 +3183,7 @@ function BudgetsView({
                   Your recorded totals still work without them.
                 </p>
               </div>
-              <Button onClick={() => onBudget()}>Set the first budget</Button>
+              <Button onClick={() => onBudget()}>Add budget</Button>
             </CardContent>
           </Card>
         )}
@@ -2517,17 +3203,15 @@ function SummaryValue({ label, value }: { label: string; value: number }) {
   )
 }
 
-function SettingsView({
+function PreferencesView({
   categories,
   onSignIn,
-  onSignOut,
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
 }: {
   categories: Category[]
   onSignIn: () => void
-  onSignOut: () => void
   onCreateCategory: ReturnType<typeof useFinance>["createCategory"]
   onUpdateCategory: ReturnType<typeof useFinance>["updateCategory"]
   onDeleteCategory: ReturnType<typeof useFinance>["deleteCategory"]
@@ -2535,55 +3219,14 @@ function SettingsView({
   const auth = useAuth()
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const cloudWorkspace = auth.status === "authenticated"
-  const metadataName =
-    typeof auth.user?.user_metadata.full_name === "string"
-      ? auth.user.user_metadata.full_name
-      : undefined
-  const profileName = cloudWorkspace
-    ? metadataName || auth.user?.email?.split("@")[0] || "Coin member"
-    : "Guest profile"
-  const profileDetail = cloudWorkspace
-    ? auth.user?.email
-    : "Your finance stays on this device"
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <Card>
-        <CardContent className="flex flex-col items-center gap-4 py-6 text-center sm:flex-row sm:text-left">
-          <Avatar className="size-16">
-            <AvatarFallback className="text-lg font-semibold">
-              {accountInitials(profileName)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">
-              {profileName}
-            </h2>
-            <p className="mt-1 truncate text-sm text-muted-foreground">
-              {profileDetail}
-            </p>
-          </div>
-          {cloudWorkspace ? (
-            <Button variant="outline" onClick={onSignOut}>
-              <LogOutIcon data-icon="inline-start" />
-              Sign out
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              disabled={!auth.configured || auth.status === "loading"}
-              onClick={onSignIn}
-            >
-              <LogInIcon data-icon="inline-start" />
-              Continue with Google
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
       <Card className="overflow-hidden">
         <CardHeader>
-          <CardTitle>Preferences</CardTitle>
+          <h1 className="font-heading text-base leading-snug font-medium">
+            Preferences
+          </h1>
           <CardDescription>
             Keep labels and display details easy to find.
           </CardDescription>
@@ -2616,24 +3259,6 @@ function SettingsView({
             </div>
             <Badge variant="outline">IDR</Badge>
           </div>
-          <Separator />
-          <div className="flex items-center gap-3 px-4 py-4">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary">
-              {cloudWorkspace ? (
-                <CloudIcon aria-hidden="true" className="size-4" />
-              ) : (
-                <HardDriveIcon aria-hidden="true" className="size-4" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">Your data</p>
-              <p className="text-xs text-muted-foreground">
-                {cloudWorkspace
-                  ? "Synced with your Coin account"
-                  : "Saved on this device"}
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -2647,6 +3272,101 @@ function SettingsView({
         onUpdateCategory={onUpdateCategory}
         onDeleteCategory={onDeleteCategory}
       />
+    </div>
+  )
+}
+
+function ProfileView({
+  onSignIn,
+  onSignOut,
+}: {
+  onSignIn: () => void
+  onSignOut: () => void
+}) {
+  const auth = useAuth()
+  const cloudWorkspace = auth.status === "authenticated"
+  const metadataName =
+    typeof auth.user?.user_metadata.full_name === "string"
+      ? auth.user.user_metadata.full_name
+      : undefined
+  const profileName = cloudWorkspace
+    ? metadataName || auth.user?.email?.split("@")[0] || "Coin member"
+    : "Guest profile"
+  const profileDetail = cloudWorkspace
+    ? auth.user?.email
+    : "Your finance stays on this device"
+
+  return (
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <h1 className="font-heading text-base leading-snug font-medium">
+            Profile
+          </h1>
+          <CardDescription>
+            Manage the account connected to this workspace.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center gap-4 pt-2 text-center sm:flex-row sm:text-left">
+          <Avatar className="size-16">
+            <AvatarFallback className="text-lg font-semibold">
+              {accountInitials(profileName)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">
+              {profileName}
+            </h2>
+            <p className="mt-1 truncate text-sm text-muted-foreground">
+              {profileDetail}
+            </p>
+          </div>
+          {cloudWorkspace ? (
+            <Button variant="outline" onClick={onSignOut}>
+              <LogOutIcon data-icon="inline-start" />
+              Sign out
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              disabled={!auth.configured || auth.status === "loading"}
+              onClick={onSignIn}
+            >
+              <LogInIcon data-icon="inline-start" />
+              Continue with Google
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Workspace</CardTitle>
+          <CardDescription>
+            See where this workspace stores your recorded finance data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary">
+            {cloudWorkspace ? (
+              <CloudIcon aria-hidden="true" className="size-4" />
+            ) : (
+              <HardDriveIcon aria-hidden="true" className="size-4" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">
+              {cloudWorkspace ? "Cloud workspace" : "On this device"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {cloudWorkspace
+                ? "Synced with your Coin account"
+                : "Your guest ledger stays in this browser."}
+            </p>
+          </div>
+          <Badge variant="outline">{cloudWorkspace ? "Cloud" : "Local"}</Badge>
+        </CardContent>
+      </Card>
     </div>
   )
 }

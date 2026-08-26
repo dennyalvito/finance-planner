@@ -111,7 +111,7 @@ test.describe("authenticated cloud workspace", () => {
     await page.locator('[data-app-ready="true"]').waitFor()
     await expect(page.getByText(editedCloudNote)).toBeVisible()
 
-    await page.goto("/settings")
+    await page.goto("/profile")
     await page.getByRole("button", { name: "Sign out" }).click()
     await expect(page.getByText(/Signed out/)).toBeVisible()
 
