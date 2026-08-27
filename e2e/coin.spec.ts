@@ -400,6 +400,10 @@ test("uses the simplified mobile dock and period controls", async ({
     return editButton
   }
 
+  const openEditButton = await swipeMobileTransaction()
+  await page.getByTestId("mobile-net-cash-flow").click()
+  await expect(openEditButton).toHaveAttribute("tabindex", "-1")
+
   await (await swipeMobileTransaction()).click()
   await expect(
     page.getByRole("heading", { name: "Edit transaction" })
@@ -528,18 +532,10 @@ test("labels the guest workspace and offers Google account mode", async ({
     page.getByTestId("route-stage").getByText("On this device", { exact: true })
   ).toBeVisible()
 
-  await page.getByRole("button", { name: "Open profile menu" }).click()
-  const profileMenu = page.getByRole("menu")
   await expect(
-    profileMenu.getByText("Guest mode", { exact: true })
-  ).toBeVisible()
-  await expect(
-    profileMenu.getByText("On this device", { exact: true })
-  ).toBeVisible()
-  await expect(
-    page.getByRole("menuitem", { name: "Continue with Google" })
-  ).toBeVisible()
-  await page.keyboard.press("Escape")
+    page.getByRole("button", { name: "Open profile menu" })
+  ).toHaveCount(0)
+  await expect(page.locator('[aria-label="Profile"]')).toBeVisible()
 
   await page
     .getByTestId("route-stage")
