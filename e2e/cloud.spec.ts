@@ -80,7 +80,6 @@ test.describe("authenticated cloud workspace", () => {
           .from("transactions")
           .select("id")
           .eq("note", cloudNote)
-          .is("deleted_at", null)
         return persisted?.length ?? 0
       })
       .toBe(1)
@@ -102,7 +101,6 @@ test.describe("authenticated cloud workspace", () => {
           .from("transactions")
           .select("id")
           .eq("note", editedCloudNote)
-          .is("deleted_at", null)
         return persisted?.length ?? 0
       })
       .toBe(1)
@@ -122,7 +120,7 @@ test.describe("authenticated cloud workspace", () => {
 
     const { error: cleanupError } = await client
       .from("transactions")
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq("note", editedCloudNote)
 
     expect(cleanupError).toBeNull()
@@ -191,7 +189,7 @@ test.describe("authenticated cloud workspace", () => {
 
     const { error: cleanupError } = await client
       .from("transactions")
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq("note", cloudNote)
     expect(cleanupError).toBeNull()
   })

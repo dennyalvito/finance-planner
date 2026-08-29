@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(41);
+select plan(42);
 
 create temporary table test_results (
   result text not null
@@ -68,21 +68,21 @@ insert into test_results (result) select ok(
   has_table_privilege('authenticated', 'public.categories', 'select')
   and has_table_privilege('authenticated', 'public.categories', 'insert')
   and has_table_privilege('authenticated', 'public.categories', 'update')
-  and not has_table_privilege('authenticated', 'public.categories', 'delete'),
+  and has_table_privilege('authenticated', 'public.categories', 'delete'),
   'Authenticated category privileges are least-privilege'
 );
 insert into test_results (result) select ok(
   has_table_privilege('authenticated', 'public.transactions', 'select')
   and has_table_privilege('authenticated', 'public.transactions', 'insert')
   and has_table_privilege('authenticated', 'public.transactions', 'update')
-  and not has_table_privilege('authenticated', 'public.transactions', 'delete'),
+  and has_table_privilege('authenticated', 'public.transactions', 'delete'),
   'Authenticated transaction privileges are least-privilege'
 );
 insert into test_results (result) select ok(
   has_table_privilege('authenticated', 'public.budgets', 'select')
   and has_table_privilege('authenticated', 'public.budgets', 'insert')
   and has_table_privilege('authenticated', 'public.budgets', 'update')
-  and not has_table_privilege('authenticated', 'public.budgets', 'delete'),
+  and has_table_privilege('authenticated', 'public.budgets', 'delete'),
   'Authenticated budget privileges are least-privilege'
 );
 
@@ -200,15 +200,14 @@ insert into test_results (result) select is(
 );
 
 with attempted_delete as (
-  update public.transactions
-  set deleted_at = now()
+  delete from public.transactions
   where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
   returning id
 )
 insert into test_results (result) select is(
   (select count(*) from attempted_delete),
   0::bigint,
-  'User A cannot soft-delete User B transactions'
+  'User A cannot delete User B transactions'
 );
 with own_update as (
   update public.transactions
@@ -220,15 +219,6 @@ insert into test_results (result) select is(
   (select count(*) from own_update),
   1::bigint,
   'User A can update their own transaction'
-);
-insert into test_results (result) select is(
-  (
-    select revision
-    from public.transactions
-    where user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-  ),
-  2::bigint,
-  'Updating a transaction advances its revision'
 );
 with attempted_transaction_update as (
   update public.transactions
@@ -251,6 +241,16 @@ insert into test_results (result) select is(
   (select count(*) from attempted_update),
   0::bigint,
   'User A cannot update User B budgets'
+);
+with attempted_budget_delete as (
+  delete from public.budgets
+  where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  returning id
+)
+insert into test_results (result) select is(
+  (select count(*) from attempted_budget_delete),
+  0::bigint,
+  'User A cannot delete User B budgets'
 );
 with own_category_update as (
   update public.categories
@@ -284,15 +284,23 @@ insert into test_results (result) select is(
   0::bigint,
   'User A cannot rename User B custom category'
 );
+with attempted_category_delete as (
+  delete from public.categories
+  where id = 'test-user-b-category'
+  returning id
+)
+insert into test_results (result) select is(
+  (select count(*) from attempted_category_delete),
+  0::bigint,
+  'User A cannot delete User B custom category'
+);
 insert into test_results (result) select throws_ok(
   $$
-    update public.categories
-    set deleted_at = now()
-    where id = 'test-user-a-category'
+    delete from public.categories where id = 'test-user-a-category'
   $$,
   '23503',
   null,
-  'A category in use cannot be soft-deleted'
+  'A category in use cannot be deleted'
 );
 
 insert into test_results (result) select throws_ok(
@@ -385,48 +393,46 @@ insert into test_results (result) select is(
   0::bigint,
   'Built-in categories are immutable to authenticated users'
 );
+with attempted_built_in_delete as (
+  delete from public.categories
+  where id = 'food'
+  returning id
+)
+insert into test_results (result) select is(
+  (select count(*) from attempted_built_in_delete),
+  0::bigint,
+  'Built-in categories cannot be deleted by authenticated users'
+);
 
 with own_budget_delete as (
-  update public.budgets
-  set deleted_at = now()
+  delete from public.budgets
   where user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   returning id
 )
 insert into test_results (result) select is(
   (select count(*) from own_budget_delete),
   1::bigint,
-  'User A can soft-delete their own budget'
+  'User A can delete their own budget'
 );
 with own_transaction_delete as (
-  update public.transactions
-  set deleted_at = now()
+  delete from public.transactions
   where user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   returning id
 )
 insert into test_results (result) select is(
   (select count(*) from own_transaction_delete),
   1::bigint,
-  'User A can soft-delete their own transaction'
+  'User A can delete their own transaction'
 );
 with own_category_delete as (
-  update public.categories
-  set deleted_at = now()
+  delete from public.categories
   where id = 'test-user-a-category'
   returning id
 )
 insert into test_results (result) select is(
   (select count(*) from own_category_delete),
   1::bigint,
-  'User A can soft-delete an unused custom category'
-);
-insert into test_results (result) select is(
-  (
-    select revision
-    from public.categories
-    where id = 'test-user-a-category'
-  ),
-  3::bigint,
-  'Rename and deletion advance the category revision'
+  'User A can delete an unused custom category'
 );
 
 reset role;

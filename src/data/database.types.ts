@@ -16,30 +16,24 @@ export type Database = {
         Row: {
           amount: number
           category_id: string
-          deleted_at: string | null
           id: string
           month: string
-          revision: number
           updated_at: string
           user_id: string
         }
         Insert: {
           amount: number
           category_id: string
-          deleted_at?: string | null
           id?: string
           month: string
-          revision?: number
           updated_at?: string
           user_id: string
         }
         Update: {
           amount?: number
           category_id?: string
-          deleted_at?: string | null
           id?: string
           month?: string
-          revision?: number
           updated_at?: string
           user_id?: string
         }
@@ -56,35 +50,26 @@ export type Database = {
       categories: {
         Row: {
           created_at: string
-          deleted_at: string | null
           id: string
           is_custom: boolean
           name: string
-          revision: number
           type: Database["public"]["Enums"]["transaction_type"]
-          updated_at: string
           user_id: string | null
         }
         Insert: {
           created_at?: string
-          deleted_at?: string | null
           id: string
           is_custom?: boolean
           name: string
-          revision?: number
           type: Database["public"]["Enums"]["transaction_type"]
-          updated_at?: string
           user_id?: string | null
         }
         Update: {
           created_at?: string
-          deleted_at?: string | null
           id?: string
           is_custom?: boolean
           name?: string
-          revision?: number
           type?: Database["public"]["Enums"]["transaction_type"]
-          updated_at?: string
           user_id?: string | null
         }
         Relationships: []
@@ -95,12 +80,9 @@ export type Database = {
           category_id: string
           created_at: string
           date: string
-          deleted_at: string | null
           id: string
           note: string
-          revision: number
           type: Database["public"]["Enums"]["transaction_type"]
-          updated_at: string
           user_id: string
         }
         Insert: {
@@ -108,12 +90,9 @@ export type Database = {
           category_id: string
           created_at?: string
           date: string
-          deleted_at?: string | null
           id?: string
           note?: string
-          revision?: number
           type: Database["public"]["Enums"]["transaction_type"]
-          updated_at?: string
           user_id: string
         }
         Update: {
@@ -121,12 +100,9 @@ export type Database = {
           category_id?: string
           created_at?: string
           date?: string
-          deleted_at?: string | null
           id?: string
           note?: string
-          revision?: number
           type?: Database["public"]["Enums"]["transaction_type"]
-          updated_at?: string
           user_id?: string
         }
         Relationships: [
