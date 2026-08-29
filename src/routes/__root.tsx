@@ -29,7 +29,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "A private, local-first finance planner for tracking income, expenses, and budgets.",
+          "A private finance planner for tracking income, expenses, and budgets.",
       },
       {
         name: "theme-color",

@@ -193,6 +193,11 @@ and sync-only timestamps are not part of the active schema.
 - Google credentials stay in Supabase; service-role credentials never ship to
   the browser.
 - Every account query is scoped by `user_id` in addition to RLS.
+- Production responses restrict framing, MIME sniffing, referrer disclosure,
+  unnecessary browser capabilities, and network connections through explicit
+  security headers and a Content Security Policy. The generated TanStack shell
+  currently requires framework-generated inline bootstrap scripts, while
+  inline event handler attributes remain blocked.
 - Real credentials and financial data do not belong in source or fixtures.
 - Transaction values, notes, access tokens, and refresh tokens must not be
   logged.
@@ -218,7 +223,8 @@ and sync-only timestamps are not part of the active schema.
 - Built-in categories are immutable and categories in use remain protected.
 - Invalid amounts and duplicate monthly budgets are rejected.
 - Generated TypeScript types match the migrated schema.
-- Supabase security and performance advisors are reviewed after deployment.
+- Supabase security and performance advisors are reviewed after database
+  deployment.
 
 ### End to end
 
@@ -246,15 +252,24 @@ and sync-only timestamps are not part of the active schema.
   directly to Supabase, cloud snapshots live only in React memory, account
   offline state is read-only, obsolete sync services/UI were removed, and the
   database returned to physical owner-scoped deletes.
+- **Online-first database deployment (2026-08-29):** the cleanup migration was
+  transactionally validated and deployed with its committed version; obsolete
+  tombstones were purged, and live owner/cross-user physical-delete checks
+  passed without retaining synthetic verification data.
+- **Browser hardening (2026-08-29):** Vercel response headers now constrain
+  content sources, framing, referrers, MIME handling, cross-origin behavior,
+  and unused browser capabilities.
 
 ## 12. Next work
 
-1. Run pgTAP and migration verification in an environment with Docker/Podman,
-   then review Supabase advisors in the deployment target.
-2. Complete the environment-gated authenticated Playwright workflow.
-3. Implement explicit, previewed, idempotent guest import without automatic
+1. Complete the environment-gated authenticated Playwright workflow against
+   the migrated deployment.
+2. Verify the production security headers, Google redirect, and PWA behavior on
+   the final Vercel deployment.
+3. Run the full local pgTAP/database-reset regression when Docker or Podman is
+   available.
+4. Implement explicit, previewed, idempotent guest import without automatic
    merging.
-4. Configure production OAuth/deployment and verify a real Google test identity.
 5. Define export, backup, account deletion, and cloud-data deletion behavior.
 
 ## 13. Recorded decisions
