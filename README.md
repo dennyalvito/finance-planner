@@ -75,7 +75,9 @@ consent-screen presentation before public launch.
 Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the appropriate
 Vercel environments. After deployment, add the final app origin to Google and
 the final return URL pattern to Supabase. Vercel hosts Coin; the Supabase
-project remains independently owned.
+project remains independently owned. `vercel.json` applies the production CSP,
+framing, referrer, MIME, cross-origin, and browser-capability security headers;
+verify those headers on the final deployment after every policy change.
 
 ## Verification
 

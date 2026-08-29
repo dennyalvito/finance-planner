@@ -1,6 +1,6 @@
 # Coin Next-Stage Handoff
 
-Status: Online-first account storage implemented; deployment verification
+Status: Online-first database deployed; authenticated application verification
 pending
 
 Baseline date: 2026-08-29
@@ -57,25 +57,22 @@ ordered execution handoff.
   guest restoration; it skips without dedicated credentials.
 - The pgTAP suite contains 42 assertions for grants, physical deletion,
   built-in/category protection, and cross-user isolation.
-- Local pgTAP, migration execution, generated-type regeneration, and database
-  lint still require an environment with Docker or Podman.
+- Cleanup migration `20260829113311` was validated in a rolled-back transaction
+  against the populated hosted schema, then deployed with its exact committed
+  version. It purged 25 transaction and 1 budget tombstone.
+- Hosted verification confirmed the obsolete columns are gone, owner deletes
+  work, cross-user deletes are rejected by RLS, category protections remain,
+  and synthetic verification data was rolled back.
+- Supabase's post-deployment performance advisor is clean. Its only security
+  warning concerns leaked-password protection; the hosted project currently
+  contains Google identities only and Coin exposes no password-auth UI.
+- Local pgTAP, database reset, generated-type regeneration, and database lint
+  still require an environment with Docker or Podman.
 - Automated tests do not complete a real Google account login.
 
 ## Next work, in order
 
-### P0.1 — Database deployment verification
-
-1. Start a disposable local Supabase stack or equivalent isolated database.
-2. Apply all migrations to an empty schema.
-3. Restore a pre-cleanup schema with representative live and tombstoned rows,
-   then apply the cleanup migration.
-4. Regenerate `src/data/database.types.ts` and confirm there is no diff.
-5. Run `pnpm test:db` and `supabase db lint --local`.
-6. After deployment, review Supabase security and performance advisors.
-
-Do not apply an unverified migration directly to the production project.
-
-### P0.2 — Authenticated workflow verification
+### P0.1 — Authenticated workflow verification
 
 - Run `e2e/cloud.spec.ts` with a dedicated synthetic account.
 - Verify a loaded account snapshot becomes read-only offline.
@@ -83,6 +80,14 @@ Do not apply an unverified migration directly to the production project.
 - Reconnect and confirm the current Supabase snapshot returns.
 - Make a change from another device, focus/resume Coin, and confirm it refetches.
 - Complete the documented Google identity continuity check.
+
+### P0.2 — Production application verification
+
+- Deploy the branch through the normal reviewed merge to `main`.
+- Verify CSP and the remaining security headers on the production responses.
+- Complete Google OAuth and direct account CRUD, including physical deletes.
+- Confirm the PWA shell still launches after an online visit and that account
+  data is not present on a cold offline reload.
 
 ### P0.3 — Explicit guest import
 
@@ -133,8 +138,8 @@ the PRD is intentionally revised.
 
 ## Suggested next-session prompt
 
-> Read `AGENTS.md`, `PRD.md`, and `NEXT_STAGE.md`. Verify the online-first
-> cleanup migration on an isolated Supabase database with both empty and
-> representative populated pre-cleanup states, regenerate types, run pgTAP and
-> advisors, then complete the authenticated Playwright workflow. Preserve guest
-> Dexie storage, online-only account storage, and integer-IDR semantics.
+> Read `AGENTS.md`, `PRD.md`, and `NEXT_STAGE.md`. Complete the authenticated
+> Playwright workflow against the migrated hosted database, verify production
+> CSP/security headers and Google OAuth after deployment, and run the full local
+> pgTAP/database-reset regression when Docker or Podman is available. Preserve
+> guest Dexie storage, online-only account storage, and integer-IDR semantics.
