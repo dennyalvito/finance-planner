@@ -1,18 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 
-import type { SyncConflict } from "@/data/account-finance.types"
-import {
-  accountHasSnapshot,
-  accountPendingCount,
-  clearAccountFinanceDatabase,
-  createAccountFinanceRepository,
-  getAccountFinanceDatabase,
-  listAccountConflicts,
-  loadAccountSnapshot,
-  resolveConflictWithCloud,
-  resolveConflictWithDevice,
-} from "@/data/account-finance-store"
 import type {
   FinanceRepository,
   FinanceSnapshot,
@@ -24,7 +12,7 @@ import {
   listTransactions,
   localFinanceRepository,
 } from "@/data/finance-repository"
-import { syncAccountFinance } from "@/data/supabase-finance-sync"
+import { createSupabaseFinanceRepository } from "@/data/supabase-finance-repository"
 import type { NewTransaction, TransactionType } from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
 import {
@@ -34,7 +22,7 @@ import {
 import {
   financeIssueFrom,
   isEmptyCloudSnapshot,
-  syncIssueFrom,
+  safeFinanceError,
 } from "@/features/finance/finance-reliability"
 import type {
   CloudWorkspaceState,
@@ -48,16 +36,6 @@ const emptySnapshot: FinanceSnapshot = {
   budgets: [],
 }
 
-async function withAccountSyncLock(
-  userId: string,
-  synchronize: () => Promise<unknown>
-) {
-  if (typeof navigator !== "undefined" && "locks" in navigator) {
-    return navigator.locks.request(`coin-account-sync:${userId}`, synchronize)
-  }
-  return synchronize()
-}
-
 export function selectFinanceRepository(
   status: "loading" | "guest" | "authenticated",
   localRepository: FinanceRepository,
@@ -67,15 +45,26 @@ export function selectFinanceRepository(
   return status === "authenticated" ? cloudRepository : localRepository
 }
 
+type CloudRefresh = {
+  userId: string
+  promise: Promise<void>
+}
+
 export function useFinance() {
   const auth = useAuth()
   const userId = auth.user?.id
+  const [cloudSnapshot, setCloudSnapshot] =
+    useState<FinanceSnapshot>(emptySnapshot)
+  const [hasCloudSnapshot, setHasCloudSnapshot] = useState(false)
   const [cloudState, setCloudState] = useState<CloudWorkspaceState>("inactive")
   const [issue, setIssue] = useState<FinanceIssue | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isOnline, setIsOnline] = useState(browserIsOnline)
-  const syncPromise = useRef<Promise<void> | null>(null)
-  const syncRequested = useRef(false)
+  const activeUserId = useRef(userId)
+  const hasCloudSnapshotRef = useRef(false)
+  const activeRefresh = useRef<CloudRefresh | null>(null)
+
+  activeUserId.current = userId
 
   useEffect(() => {
     void ensureFinanceSeed()
@@ -85,133 +74,114 @@ export function useFinance() {
   const localCategories = useLiveQuery(listCategories, [], [])
   const localBudgets = useLiveQuery(listBudgets, [], [])
 
-  const accountDb = useMemo(
-    () =>
-      auth.status === "authenticated" && userId
-        ? getAccountFinanceDatabase(userId)
-        : undefined,
-    [auth.status, userId]
-  )
-  const accountRepository = useMemo(
-    () => (accountDb ? createAccountFinanceRepository(accountDb) : undefined),
-    [accountDb]
-  )
-  const accountSnapshot = useLiveQuery(
-    () => (accountDb ? loadAccountSnapshot(accountDb) : emptySnapshot),
-    [accountDb],
-    emptySnapshot
-  )
-  const hasAccountSnapshot = useLiveQuery(
-    () => (accountDb ? accountHasSnapshot(accountDb) : false),
-    [accountDb]
-  )
-  const pendingCount = useLiveQuery(
-    () => (accountDb ? accountPendingCount(accountDb) : 0),
-    [accountDb],
-    0
-  )
-  const conflicts = useLiveQuery(
-    () => (accountDb ? listAccountConflicts(accountDb) : []),
-    [accountDb],
-    []
-  )
-
+  const cloudRepository = useMemo(() => {
+    if (auth.status !== "authenticated" || !userId) return undefined
+    const client = getSupabaseClient()
+    return client ? createSupabaseFinanceRepository(client, userId) : undefined
+  }, [auth.status, userId])
   const repository = selectFinanceRepository(
     auth.status,
     localFinanceRepository,
-    accountRepository
+    cloudRepository
   )
 
-  const syncNow = useCallback(async () => {
-    if (!accountDb || !userId) return
-    if (syncPromise.current) {
-      syncRequested.current = true
-      return syncPromise.current
-    }
+  const refreshCloud = useCallback(
+    async (afterCurrent = false): Promise<void> => {
+      if (!cloudRepository || !userId) return
 
-    const currentlyOnline = browserIsOnline()
-    setIsOnline(currentlyOnline)
+      const current = activeRefresh.current
+      if (current?.userId === userId) {
+        if (afterCurrent) {
+          await current.promise
+          if (activeRefresh.current === current) activeRefresh.current = null
+          if (activeUserId.current === userId) await refreshCloud(false)
+          return
+        }
+        return current.promise
+      }
 
-    if (!currentlyOnline) {
-      const hasSnapshot = await accountHasSnapshot(accountDb)
-      setCloudState("offline")
-      setIssue(
-        hasSnapshot ? syncIssueFrom(false) : financeIssueFrom("load", false)
-      )
+      const currentlyOnline = browserIsOnline()
+      setIsOnline(currentlyOnline)
+      if (!currentlyOnline) {
+        setCloudState("offline")
+        setIssue(financeIssueFrom("load", false))
+        return
+      }
+
+      const request = (async () => {
+        if (!hasCloudSnapshotRef.current) setCloudState("loading")
+        setIsRefreshing(true)
+        setIssue(null)
+
+        try {
+          const nextSnapshot = await cloudRepository.load()
+          if (activeUserId.current !== userId) return
+
+          hasCloudSnapshotRef.current = true
+          setHasCloudSnapshot(true)
+          setCloudSnapshot(nextSnapshot)
+          setCloudState(isEmptyCloudSnapshot(nextSnapshot) ? "empty" : "ready")
+        } catch {
+          if (activeUserId.current !== userId) return
+          const stillOnline = browserIsOnline()
+          setIsOnline(stillOnline)
+          setCloudState(stillOnline ? "error" : "offline")
+          setIssue(financeIssueFrom("load", stillOnline))
+        } finally {
+          if (activeUserId.current === userId) setIsRefreshing(false)
+        }
+      })()
+
+      const tracked = { userId, promise: request }
+      activeRefresh.current = tracked
+      try {
+        await request
+      } finally {
+        if (activeRefresh.current === tracked) activeRefresh.current = null
+      }
+    },
+    [cloudRepository, userId]
+  )
+
+  useEffect(() => {
+    setIsOnline(browserIsOnline())
+    setIssue(null)
+    setCloudSnapshot(emptySnapshot)
+    setHasCloudSnapshot(false)
+    hasCloudSnapshotRef.current = false
+
+    if (auth.status !== "authenticated" || !userId) {
+      setCloudState("inactive")
+      setIsRefreshing(false)
       return
     }
 
-    const client = getSupabaseClient()
-    if (!client) return
-
-    const run = (async () => {
-      const hasSnapshot = await accountHasSnapshot(accountDb)
-      setIsRefreshing(true)
-      if (!hasSnapshot) setCloudState("loading")
-      setIssue(null)
-
-      try {
-        await withAccountSyncLock(userId, () =>
-          syncAccountFinance(client, userId, accountDb)
-        )
-        const snapshot = await loadAccountSnapshot(accountDb)
-        setCloudState(isEmptyCloudSnapshot(snapshot) ? "empty" : "ready")
-      } catch {
-        const stillOnline = browserIsOnline()
-        setIsOnline(stillOnline)
-        setCloudState(stillOnline ? "error" : "offline")
-        setIssue(
-          (await accountHasSnapshot(accountDb))
-            ? syncIssueFrom(stillOnline)
-            : financeIssueFrom("load", stillOnline)
-        )
-      } finally {
-        setIsRefreshing(false)
-      }
-    })()
-
-    syncPromise.current = run
-    try {
-      await run
-    } finally {
-      syncPromise.current = null
-      if (syncRequested.current) {
-        syncRequested.current = false
-        queueMicrotask(() => void syncNow())
-      }
+    if (browserIsOnline()) {
+      void refreshCloud()
+    } else {
+      setCloudState("offline")
+      setIssue(financeIssueFrom("load", false))
     }
-  }, [accountDb, userId])
+  }, [auth.status, refreshCloud, userId])
 
   useEffect(
     () =>
       subscribeToBrowserConnectivity((currentlyOnline, reason) => {
         setIsOnline(currentlyOnline)
-        if (reason === "resume" && currentlyOnline && isOnline) {
-          void syncNow()
+        if (auth.status !== "authenticated") return
+
+        if (!currentlyOnline) {
+          setCloudState("offline")
+          setIssue(financeIssueFrom("load", false))
+          return
+        }
+
+        if (reason === "resume" || cloudState === "offline") {
+          void refreshCloud(true)
         }
       }),
-    [isOnline, syncNow]
+    [auth.status, cloudState, refreshCloud]
   )
-
-  useEffect(() => {
-    if (!accountDb) {
-      setCloudState("inactive")
-      setIssue(null)
-      return
-    }
-
-    if (isOnline) {
-      void syncNow()
-      return
-    }
-
-    void accountHasSnapshot(accountDb).then((hasSnapshot) => {
-      setCloudState("offline")
-      setIssue(
-        hasSnapshot ? syncIssueFrom(false) : financeIssueFrom("load", false)
-      )
-    })
-  }, [accountDb, isOnline, syncNow])
 
   const runMutation = useCallback(
     async <TResult>(
@@ -221,21 +191,31 @@ export function useFinance() {
         throw new Error("The active workspace is still loading.")
       }
 
-      setIssue(null)
-      const result = await operation(repository)
-
-      if (repository.storage === "cloud") {
-        if (isOnline) {
-          void syncNow()
-        } else {
-          setCloudState("offline")
-          setIssue(syncIssueFrom(false))
-        }
+      if (repository.storage === "cloud" && !browserIsOnline()) {
+        const nextIssue = financeIssueFrom("mutation", false)
+        setIsOnline(false)
+        setCloudState("offline")
+        setIssue(nextIssue)
+        throw safeFinanceError(nextIssue)
       }
 
-      return result
+      setIssue(null)
+      try {
+        const result = await operation(repository)
+        if (repository.storage === "cloud") await refreshCloud(true)
+        return result
+      } catch (error) {
+        if (repository.storage !== "cloud") throw error
+
+        const stillOnline = browserIsOnline()
+        const nextIssue = financeIssueFrom("mutation", stillOnline)
+        setIsOnline(stillOnline)
+        setIssue(nextIssue)
+        if (!stillOnline) setCloudState("offline")
+        throw safeFinanceError(nextIssue)
+      }
     },
-    [isOnline, repository, syncNow]
+    [refreshCloud, repository]
   )
 
   const addTransaction = useCallback(
@@ -298,38 +278,9 @@ export function useFinance() {
     [runMutation]
   )
 
-  const useCloudConflict = useCallback(
-    async (conflict: SyncConflict) => {
-      if (!accountDb) return
-      await resolveConflictWithCloud(accountDb, conflict)
-      if (isOnline) void syncNow()
-    },
-    [accountDb, isOnline, syncNow]
-  )
-  const useDeviceConflict = useCallback(
-    async (conflict: SyncConflict) => {
-      if (!accountDb) return
-      await resolveConflictWithDevice(accountDb, conflict)
-      if (isOnline) void syncNow()
-    },
-    [accountDb, isOnline, syncNow]
-  )
-  const clearAccountData = useCallback(async () => {
-    if (!userId) return
-    await clearAccountFinanceDatabase(userId)
-  }, [userId])
-  const getPendingCount = useCallback(
-    () => (accountDb ? accountPendingCount(accountDb) : Promise.resolve(0)),
-    [accountDb]
-  )
-  const syncPendingChanges = useCallback(async () => {
-    await syncNow()
-    return getPendingCount()
-  }, [getPendingCount, syncNow])
-
   const snapshot =
     auth.status === "authenticated"
-      ? accountSnapshot
+      ? cloudSnapshot
       : auth.status === "guest"
         ? {
             transactions: localTransactions,
@@ -337,8 +288,12 @@ export function useFinance() {
             budgets: localBudgets,
           }
         : emptySnapshot
-  const loadingAccountCache =
-    auth.status === "authenticated" && hasAccountSnapshot === undefined
+  const isCloudWorkspace = auth.status === "authenticated"
+  const isGuestStorageLoading =
+    auth.status === "guest" && localCategories.length === 0
+  const canMutate =
+    !isCloudWorkspace ||
+    (isOnline && hasCloudSnapshot && cloudState !== "loading")
 
   return useMemo(
     () => ({
@@ -346,21 +301,15 @@ export function useFinance() {
       storage: repository?.storage ?? "device",
       isLoading:
         auth.status === "loading" ||
-        loadingAccountCache ||
-        (cloudState === "loading" && !hasAccountSnapshot),
+        isGuestStorageLoading ||
+        (isCloudWorkspace && cloudState === "loading" && !hasCloudSnapshot),
       isRefreshing,
       isOnline,
+      canMutate,
+      hasCloudSnapshot,
       cloudState,
       issue,
-      pendingCount,
-      conflicts,
-      retryCloud: syncNow,
-      syncNow,
-      syncPendingChanges,
-      useCloudConflict,
-      useDeviceConflict,
-      clearAccountData,
-      getPendingCount,
+      retryCloud: () => refreshCloud(true),
       addTransaction,
       updateTransaction,
       createCategory,
@@ -374,30 +323,25 @@ export function useFinance() {
     [
       addTransaction,
       auth.status,
-      clearAccountData,
+      canMutate,
       clearDemoTransactions,
       cloudState,
-      conflicts,
       createCategory,
       deleteBudget,
       deleteCategory,
       deleteTransaction,
-      getPendingCount,
-      hasAccountSnapshot,
+      hasCloudSnapshot,
+      isCloudWorkspace,
+      isGuestStorageLoading,
       isOnline,
       isRefreshing,
       issue,
-      loadingAccountCache,
-      pendingCount,
+      refreshCloud,
       repository?.storage,
       saveBudget,
       snapshot,
-      syncNow,
-      syncPendingChanges,
       updateCategory,
       updateTransaction,
-      useCloudConflict,
-      useDeviceConflict,
     ]
   )
 }

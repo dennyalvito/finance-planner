@@ -31,6 +31,7 @@ type CloudWorkspaceStatusProps = {
   state: CloudWorkspaceState
   issue: FinanceIssue | null
   isRefreshing: boolean
+  hasSnapshot: boolean
   onRetry: () => void
 }
 
@@ -55,6 +56,7 @@ export function CloudWorkspaceStatus({
   state,
   issue,
   isRefreshing,
+  hasSnapshot,
   onRetry,
 }: CloudWorkspaceStatusProps) {
   if (issue?.source === "mutation") {
@@ -88,37 +90,51 @@ export function CloudWorkspaceStatus({
     return <LoadingCloudWorkspace />
   }
 
-  if (
-    (state === "error" && issue?.source !== "sync") ||
-    (state === "offline" && issue?.source === "load")
-  ) {
+  if ((state === "error" || state === "offline") && !hasSnapshot) {
     const offline = state === "offline"
 
     return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            {offline ? <WifiOffIcon /> : <CloudAlertIcon />}
-          </EmptyMedia>
-          <EmptyTitle>
-            {issue?.title ?? "Cloud data could not be loaded"}
-          </EmptyTitle>
-          <EmptyDescription>
-            {issue?.message ??
-              "Your cloud workspace was not changed. Retry when your connection is stable."}
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button onClick={onRetry} disabled={isRefreshing || offline}>
-            {isRefreshing ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <RefreshCwIcon data-icon="inline-start" />
-            )}
-            {isRefreshing ? "Retrying..." : "Retry"}
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <div className="flex flex-col gap-5">
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              {offline ? <WifiOffIcon /> : <CloudAlertIcon />}
+            </EmptyMedia>
+            <EmptyTitle>
+              {offline
+                ? "Connect to load your account"
+                : (issue?.title ?? "Cloud data could not be loaded")}
+            </EmptyTitle>
+            <EmptyDescription>
+              {offline
+                ? "Coin can open offline, but account data is only available from Supabase. Guest data remains available on this device."
+                : (issue?.message ??
+                  "Your cloud workspace was not changed. Retry when your connection is stable.")}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={onRetry} disabled={isRefreshing || offline}>
+              {isRefreshing ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <RefreshCwIcon data-icon="inline-start" />
+              )}
+              {isRefreshing
+                ? "Retrying..."
+                : offline
+                  ? "Waiting for connection"
+                  : "Retry"}
+            </Button>
+          </EmptyContent>
+        </Empty>
+        <div
+          className="grid gap-4 sm:grid-cols-2"
+          aria-label="Account data unavailable offline"
+        >
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      </div>
     )
   }
 
@@ -135,14 +151,44 @@ export function CloudWorkspaceStatus({
     )
   }
 
+  if (state === "offline") {
+    return (
+      <Alert>
+        <WifiOffIcon />
+        <AlertTitle>Viewing previously loaded data</AlertTitle>
+        <AlertDescription>
+          Coin is offline. This account snapshot is read-only and will refresh
+          from Supabase when the connection returns.
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
   return (
     <Alert>
-      <WifiOffIcon />
-      <AlertTitle>{issue?.title ?? "Cloud workspace is offline"}</AlertTitle>
+      <CloudAlertIcon />
+      <AlertTitle>
+        {issue?.title ?? "Cloud data could not be refreshed"}
+      </AlertTitle>
       <AlertDescription>
         {issue?.message ??
-          "Changes are saved on this device and will sync when Coin is open and online."}
+          "The previously loaded account data remains visible. Retry when your connection is stable."}
       </AlertDescription>
+      <AlertAction>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <RefreshCwIcon data-icon="inline-start" />
+          )}
+          {isRefreshing ? "Retrying..." : "Retry"}
+        </Button>
+      </AlertAction>
     </Alert>
   )
 }

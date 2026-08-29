@@ -133,14 +133,12 @@ import type {
   LedgerSummary,
 } from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
-import { GuardedSignOutDialog } from "@/features/auth/guarded-sign-out-dialog"
 import { SignInDialog } from "@/features/auth/sign-in-dialog"
 import { BudgetDialog } from "@/features/finance/budget-dialog"
 import { CategoryManager } from "@/features/finance/category-manager"
 import { getCategoryIcon } from "@/features/finance/category-icon"
 import { CloudWorkspaceStatus } from "@/features/finance/cloud-workspace-status"
 import { TransactionDialog } from "@/features/finance/transaction-dialog"
-import { SyncStatus } from "@/features/finance/sync-status"
 import { useFinance } from "@/features/finance/use-finance"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -285,12 +283,14 @@ function useTransactionOverlay() {
 function TransactionOverlayProvider({
   categories,
   children,
+  disabled,
   onCreateCategory,
   onAdd,
   onUpdate,
 }: {
   categories: Category[]
   children: React.ReactNode
+  disabled: boolean
   onCreateCategory: (
     name: string,
     type: FinanceTransaction["type"]
@@ -326,6 +326,7 @@ function TransactionOverlayProvider({
         onOpenChange={handleOpenChange}
         categories={categories}
         transaction={transaction}
+        disabled={disabled}
         onCreateCategory={onCreateCategory}
         onSubmit={handleSubmit}
       />
@@ -339,6 +340,7 @@ export function CoinApp() {
   return (
     <TransactionOverlayProvider
       categories={finance.categories}
+      disabled={!finance.canMutate}
       onCreateCategory={finance.createCategory}
       onAdd={finance.addTransaction}
       onUpdate={finance.updateTransaction}
@@ -351,7 +353,6 @@ export function CoinApp() {
 function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   const auth = useAuth()
   const { signOut } = auth
-  const { clearAccountData, getPendingCount, syncPendingChanges } = finance
   const pathname = useLocation({
     select: (location) => location.pathname,
   })
@@ -360,52 +361,57 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   const [budgetOpen, setBudgetOpen] = useState(false)
   const [budgetCategoryId, setBudgetCategoryId] = useState<string>()
   const [signInOpen, setSignInOpen] = useState(false)
-  const [signOutOpen, setSignOutOpen] = useState(false)
-  const [signOutPendingCount, setSignOutPendingCount] = useState(0)
   const { openTransaction } = useTransactionOverlay()
-  const openNewTransaction = useCallback(
-    () => openTransaction(),
-    [openTransaction]
-  )
+  const openNewTransaction = useCallback(() => {
+    if (!finance.canMutate) {
+      toast.error("Account data is read-only while offline.")
+      return
+    }
+    openTransaction()
+  }, [finance.canMutate, openTransaction])
   const appReady = isInteractive && !finance.isLoading
-  const openBudget = useCallback((categoryId?: string) => {
-    setBudgetCategoryId(categoryId)
-    setBudgetOpen(true)
-  }, [])
+  const openBudget = useCallback(
+    (categoryId?: string) => {
+      if (!finance.canMutate) {
+        toast.error("Account data is read-only while offline.")
+        return
+      }
+      setBudgetCategoryId(categoryId)
+      setBudgetOpen(true)
+    },
+    [finance.canMutate]
+  )
   const openSignIn = useCallback(() => setSignInOpen(true), [])
-  const completeSignOut = useCallback(async () => {
-    await signOut()
-    await clearAccountData()
-    toast.success("Signed out. Your guest workspace is still on this device.")
-  }, [clearAccountData, signOut])
   const requestSignOut = useCallback(() => {
-    void getPendingCount()
-      .then(async (currentPendingCount) => {
-        if (currentPendingCount > 0) {
-          setSignOutPendingCount(currentPendingCount)
-          setSignOutOpen(true)
-          return
-        }
-        await completeSignOut()
+    void signOut()
+      .then(() => {
+        toast.success(
+          "Signed out. Your guest workspace is still on this device."
+        )
       })
       .catch((error: unknown) => {
         toast.error(error instanceof Error ? error.message : "Sign-out failed.")
       })
-  }, [completeSignOut, getPendingCount])
-  const syncAndSignOut = useCallback(async () => {
-    const remaining = await syncPendingChanges()
-    if (remaining === 0) await completeSignOut()
-    return remaining
-  }, [completeSignOut, syncPendingChanges])
+  }, [signOut])
+  const openEditableTransaction = useCallback(
+    (transaction?: FinanceTransaction) => {
+      if (!finance.canMutate) {
+        toast.error("Account data is read-only while offline.")
+        return
+      }
+      openTransaction(transaction)
+    },
+    [finance.canMutate, openTransaction]
+  )
   const contextValue = useMemo(
     () => ({
       ...finance,
       openBudget,
       openSignIn,
-      openTransaction,
+      openTransaction: openEditableTransaction,
       requestSignOut,
     }),
-    [finance, openBudget, openSignIn, openTransaction, requestSignOut]
+    [finance, openBudget, openEditableTransaction, openSignIn, requestSignOut]
   )
 
   useEffect(() => {
@@ -415,7 +421,11 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
   return (
     <CoinAppContext.Provider value={contextValue}>
       <SidebarProvider>
-        <CoinSidebar view={view} onAdd={openNewTransaction} />
+        <CoinSidebar
+          view={view}
+          onAdd={openNewTransaction}
+          canMutate={finance.canMutate}
+        />
         <SidebarInset
           data-app-ready={appReady ? "true" : "false"}
           aria-busy={!appReady}
@@ -427,6 +437,7 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
             onAdd={openNewTransaction}
             onSignIn={openSignIn}
             onSignOut={requestSignOut}
+            canMutate={finance.canMutate}
           />
           <div
             key={view}
@@ -439,49 +450,35 @@ function CoinAppShell({ finance }: { finance: ReturnType<typeof useFinance> }) {
                 state={finance.cloudState}
                 issue={finance.issue}
                 isRefreshing={finance.isRefreshing}
+                hasSnapshot={finance.hasCloudSnapshot}
                 onRetry={() => void finance.retryCloud()}
               />
-              {finance.storage === "cloud" && (
-                <SyncStatus
-                  pendingCount={finance.pendingCount}
-                  conflicts={finance.conflicts}
-                  isOnline={finance.isOnline}
-                  onUseCloud={finance.useCloudConflict}
-                  onUseDevice={finance.useDeviceConflict}
-                />
-              )}
               {finance.cloudState !== "loading" &&
                 !(
-                  finance.cloudState === "error" &&
-                  finance.issue?.source !== "sync"
-                ) &&
-                !(
-                  finance.cloudState === "offline" &&
-                  finance.issue?.source === "load"
+                  (finance.cloudState === "error" ||
+                    finance.cloudState === "offline") &&
+                  !finance.hasCloudSnapshot
                 ) && <Outlet />}
             </div>
           </div>
         </SidebarInset>
 
-        <MobileDock view={view} onAdd={openNewTransaction} />
+        <MobileDock
+          view={view}
+          onAdd={openNewTransaction}
+          canMutate={finance.canMutate}
+        />
         <BudgetDialog
           open={budgetOpen}
           onOpenChange={setBudgetOpen}
           categories={finance.categories}
           budgets={finance.budgets}
           initialCategoryId={budgetCategoryId}
+          disabled={!finance.canMutate}
           onSubmit={finance.saveBudget}
           onDelete={finance.deleteBudget}
         />
         <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
-        <GuardedSignOutDialog
-          open={signOutOpen}
-          onOpenChange={setSignOutOpen}
-          pendingCount={Math.max(signOutPendingCount, finance.pendingCount)}
-          isOnline={finance.isOnline}
-          onSync={syncAndSignOut}
-          onDiscardAndSignOut={completeSignOut}
-        />
       </SidebarProvider>
     </CoinAppContext.Provider>
   )
@@ -500,6 +497,7 @@ export function OverviewPage() {
       onBudget={finance.openBudget}
       onDelete={finance.deleteTransaction}
       onClearDemo={finance.clearDemoTransactions}
+      canMutate={finance.canMutate}
     />
   )
 }
@@ -515,6 +513,7 @@ export function TransactionsPage() {
       onEdit={finance.openTransaction}
       onDelete={finance.deleteTransaction}
       onClearDemo={finance.clearDemoTransactions}
+      canMutate={finance.canMutate}
     />
   )
 }
@@ -528,6 +527,7 @@ export function BudgetsPage() {
       transactions={finance.transactions}
       budgets={finance.budgets}
       onBudget={finance.openBudget}
+      canMutate={finance.canMutate}
     />
   )
 }
@@ -543,6 +543,7 @@ export function SettingsPage() {
       onCreateCategory={finance.createCategory}
       onUpdateCategory={finance.updateCategory}
       onDeleteCategory={finance.deleteCategory}
+      canMutate={finance.canMutate}
     />
   )
 }
@@ -556,7 +557,15 @@ function accountInitials(email?: string) {
   return email.slice(0, 2).toUpperCase()
 }
 
-function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
+function CoinSidebar({
+  view,
+  onAdd,
+  canMutate,
+}: {
+  view: CoinView
+  onAdd: () => void
+  canMutate: boolean
+}) {
   const auth = useAuth()
   const cloudWorkspace = auth.status === "authenticated"
   const profile = cloudWorkspace ? accountLabel(auth.user?.email) : "Guest mode"
@@ -610,6 +619,7 @@ function CoinSidebar({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={onAdd}
+                  disabled={!canMutate}
                   tooltip="Add transaction"
                   size="lg"
                   className="group-data-[collapsible=icon]:justify-center"
@@ -663,11 +673,13 @@ function AppHeader({
   onAdd,
   onSignIn,
   onSignOut,
+  canMutate,
 }: {
   view: CoinView
   onAdd: () => void
   onSignIn: () => void
   onSignOut: () => void
+  canMutate: boolean
 }) {
   const auth = useAuth()
   const title =
@@ -698,6 +710,7 @@ function AppHeader({
           data-testid="add-transaction-desktop"
           className="hidden md:inline-flex"
           onClick={onAdd}
+          disabled={!canMutate}
         >
           <PlusIcon data-icon="inline-start" />
           Add transaction
@@ -757,7 +770,15 @@ function AppHeader({
     </header>
   )
 }
-function MobileDock({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
+function MobileDock({
+  view,
+  onAdd,
+  canMutate,
+}: {
+  view: CoinView
+  onAdd: () => void
+  canMutate: boolean
+}) {
   const first = navigation.slice(0, 2)
   const last = navigation.slice(2)
 
@@ -777,6 +798,7 @@ function MobileDock({ view, onAdd }: { view: CoinView; onAdd: () => void }) {
           className="-mt-7 size-12 rounded-full shadow-lg"
           aria-label="Add transaction"
           onClick={onAdd}
+          disabled={!canMutate}
         >
           <PlusIcon />
         </Button>
@@ -907,6 +929,7 @@ type FinanceViewProps = {
   categories: Category[]
   transactions: FinanceTransaction[]
   budgets: Budget[]
+  canMutate: boolean
 }
 
 function OverviewView({
@@ -918,12 +941,14 @@ function OverviewView({
   onBudget,
   onDelete,
   onClearDemo,
+  canMutate,
 }: FinanceViewProps & {
   onAdd: () => void
   onEdit: (transaction: FinanceTransaction) => void
   onBudget: () => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
+  canMutate: boolean
 }) {
   const isMobile = useIsMobile()
   const chartsReady = useOverviewChartsReady()
@@ -991,6 +1016,7 @@ function OverviewView({
         onCustomRangeChange={setCustomRange}
         onEdit={onEdit}
         onDelete={onDelete}
+        canMutate={canMutate}
       />
 
       <div
@@ -1123,7 +1149,12 @@ function OverviewView({
                 />
               </CardContent>
               <CardFooter>
-                <Button variant="outline" size="sm" onClick={onBudget}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onBudget}
+                  disabled={!canMutate}
+                >
                   <GaugeIcon data-icon="inline-start" />
                   {budget.configured ? "Adjust budget" : "Set a budget"}
                 </Button>
@@ -1132,13 +1163,18 @@ function OverviewView({
           </div>
 
           <div className="flex min-w-0 flex-col gap-4">
-            <QuickActions onAdd={onAdd} onBudget={onBudget} />
+            <QuickActions
+              onAdd={onAdd}
+              onBudget={onBudget}
+              disabled={!canMutate}
+            />
             <RecentTransactions
               categories={categories}
               transactions={transactions.slice(0, 5)}
               onEdit={onEdit}
               onDelete={onDelete}
               onClearDemo={onClearDemo}
+              canMutate={canMutate}
               compact
             />
           </div>
@@ -1171,6 +1207,7 @@ function MobileOverview({
   onCustomRangeChange,
   onEdit,
   onDelete,
+  canMutate,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
@@ -1186,6 +1223,7 @@ function MobileOverview({
   onCustomRangeChange: (range: DateRange) => void
   onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
+  canMutate: boolean
 }) {
   return (
     <section
@@ -1323,6 +1361,7 @@ function MobileOverview({
             transactions={transactions.slice(0, 4)}
             onEdit={onEdit}
             onDelete={onDelete}
+            readOnly={!canMutate}
             compact
           />
         </CardContent>
@@ -1757,9 +1796,11 @@ function MetricCard({
 function QuickActions({
   onAdd,
   onBudget,
+  disabled,
 }: {
   onAdd: () => void
   onBudget: () => void
+  disabled: boolean
 }) {
   return (
     <Card>
@@ -1772,6 +1813,7 @@ function QuickActions({
           variant="outline"
           className="h-auto justify-start py-3"
           onClick={onAdd}
+          disabled={disabled}
         >
           <PlusIcon data-icon="inline-start" />
           Transaction
@@ -1780,6 +1822,7 @@ function QuickActions({
           variant="outline"
           className="h-auto justify-start py-3"
           onClick={onBudget}
+          disabled={disabled}
         >
           <GaugeIcon data-icon="inline-start" />
           Budget
@@ -1796,6 +1839,7 @@ function TransactionsView({
   onEdit,
   onDelete,
   onClearDemo,
+  canMutate,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
@@ -1803,6 +1847,7 @@ function TransactionsView({
   onEdit: (transaction: FinanceTransaction) => void
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
+  canMutate: boolean
 }) {
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">(
     "all"
@@ -1926,6 +1971,7 @@ function TransactionsView({
               transactions={visible}
               onEdit={onEdit}
               onDelete={onDelete}
+              readOnly={!canMutate}
               detailed
               groupByDate
             />
@@ -1952,7 +1998,7 @@ function TransactionsView({
                     Reset filters
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={onAdd}>
+                  <Button size="sm" onClick={onAdd} disabled={!canMutate}>
                     <PlusIcon data-icon="inline-start" />
                     Add transaction
                   </Button>
@@ -2023,6 +2069,7 @@ function RecentTransactions({
   onDelete,
   onClearDemo,
   compact,
+  canMutate,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
@@ -2030,6 +2077,7 @@ function RecentTransactions({
   onDelete: (id: string) => Promise<void>
   onClearDemo: () => Promise<void>
   compact?: boolean
+  canMutate: boolean
 }) {
   const hasDemo = transactions.some((transaction) => transaction.isDemo)
   return (
@@ -2050,12 +2098,18 @@ function RecentTransactions({
           onEdit={onEdit}
           onDelete={onDelete}
           compact={compact}
+          readOnly={!canMutate}
         />
       </CardContent>
       {hasDemo && (
         <CardFooter className="justify-between">
           <Badge variant="outline">Example data</Badge>
-          <Button variant="ghost" size="sm" onClick={onClearDemo}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClearDemo}
+            disabled={!canMutate}
+          >
             Clear
           </Button>
         </CardFooter>
@@ -2073,6 +2127,7 @@ function TransactionList({
   detailed,
   groupByDate,
   hideDelete,
+  readOnly,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
@@ -2082,6 +2137,7 @@ function TransactionList({
   detailed?: boolean
   groupByDate?: boolean
   hideDelete?: boolean
+  readOnly?: boolean
 }) {
   if (!transactions.length) {
     return (
@@ -2123,19 +2179,6 @@ function TransactionList({
                   {transaction.note ||
                     (transaction.type === "income" ? "Income" : "Expense")}
                 </p>
-                {transaction.syncStatus && (
-                  <Badge
-                    variant={
-                      transaction.syncStatus === "conflict"
-                        ? "destructive"
-                        : "secondary"
-                    }
-                  >
-                    {transaction.syncStatus === "conflict"
-                      ? "Conflict"
-                      : "Pending"}
-                  </Badge>
-                )}
               </div>
             </div>
             <div className="shrink-0 text-right">
@@ -2158,14 +2201,14 @@ function TransactionList({
                 </p>
               )}
             </div>
-            {!hideDelete && onEdit ? (
+            {!readOnly && !hideDelete && onEdit ? (
               <TransactionActions
                 transaction={transaction}
                 categoryName={category?.name ?? "Other"}
                 onEdit={onEdit}
                 onDelete={onDelete}
               />
-            ) : !hideDelete ? (
+            ) : !readOnly && !hideDelete ? (
               <DeleteTransactionButton
                 transaction={transaction}
                 onDelete={onDelete}
@@ -2380,6 +2423,7 @@ function BudgetsView({
   transactions,
   budgets,
   onBudget,
+  canMutate,
 }: FinanceViewProps & { onBudget: (categoryId?: string) => void }) {
   const currentMonth = monthKey(new Date())
   const active = budgets.filter((budget) => budget.month === currentMonth)
@@ -2463,22 +2507,10 @@ function BudgetsView({
                     variant="ghost"
                     size="sm"
                     onClick={() => onBudget(budget.categoryId)}
+                    disabled={!canMutate}
                   >
                     Adjust limit
                   </Button>
-                  {budget.syncStatus && (
-                    <Badge
-                      variant={
-                        budget.syncStatus === "conflict"
-                          ? "destructive"
-                          : "secondary"
-                      }
-                    >
-                      {budget.syncStatus === "conflict"
-                        ? "Conflict"
-                        : "Pending"}
-                    </Badge>
-                  )}
                 </div>
               </CardFooter>
             </Card>
@@ -2497,7 +2529,9 @@ function BudgetsView({
                   Your recorded totals still work without them.
                 </p>
               </div>
-              <Button onClick={() => onBudget()}>Set the first budget</Button>
+              <Button onClick={() => onBudget()} disabled={!canMutate}>
+                Set the first budget
+              </Button>
             </CardContent>
           </Card>
         )}
@@ -2524,6 +2558,7 @@ function SettingsView({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
+  canMutate,
 }: {
   categories: Category[]
   onSignIn: () => void
@@ -2531,6 +2566,7 @@ function SettingsView({
   onCreateCategory: ReturnType<typeof useFinance>["createCategory"]
   onUpdateCategory: ReturnType<typeof useFinance>["updateCategory"]
   onDeleteCategory: ReturnType<typeof useFinance>["deleteCategory"]
+  canMutate: boolean
 }) {
   const auth = useAuth()
   const [categoriesOpen, setCategoriesOpen] = useState(false)
@@ -2629,7 +2665,7 @@ function SettingsView({
               <p className="font-medium">Your data</p>
               <p className="text-xs text-muted-foreground">
                 {cloudWorkspace
-                  ? "Synced with your Coin account"
+                  ? "Stored in your Coin account"
                   : "Saved on this device"}
               </p>
             </div>
@@ -2642,6 +2678,7 @@ function SettingsView({
         onOpenChange={setCategoriesOpen}
         categories={categories}
         canCustomize={cloudWorkspace}
+        readOnly={cloudWorkspace && !canMutate}
         onSignIn={onSignIn}
         onCreateCategory={onCreateCategory}
         onUpdateCategory={onUpdateCategory}

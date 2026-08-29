@@ -17,14 +17,14 @@ export function subscribeToBrowserConnectivity(
 
   window.addEventListener("online", update)
   window.addEventListener("offline", update)
-  window.addEventListener("focus", update)
+  window.addEventListener("focus", updateOnResume)
   window.addEventListener("pageshow", updateOnResume)
   document.addEventListener("visibilitychange", updateWhenVisible)
 
   return () => {
     window.removeEventListener("online", update)
     window.removeEventListener("offline", update)
-    window.removeEventListener("focus", update)
+    window.removeEventListener("focus", updateOnResume)
     window.removeEventListener("pageshow", updateOnResume)
     document.removeEventListener("visibilitychange", updateWhenVisible)
   }

@@ -128,7 +128,7 @@ test.describe("authenticated cloud workspace", () => {
     expect(cleanupError).toBeNull()
   })
 
-  test("queues an authenticated transaction offline and syncs it when connectivity returns", async ({
+  test("keeps loaded account data read-only offline without an account database", async ({
     context,
     page,
   }) => {
@@ -147,7 +147,16 @@ test.describe("authenticated cloud workspace", () => {
 
     const projectRef = new URL(supabaseUrl!).hostname.split(".")[0]
     const storageKey = `sb-${projectRef}-auth-token`
-    const offlineNote = `Offline queue ${crypto.randomUUID()}`
+    const cloudNote = `Read-only offline ${crypto.randomUUID()}`
+    const { error: insertError } = await client.from("transactions").insert({
+      user_id: data.user!.id,
+      type: "expense",
+      amount: 33_000,
+      category_id: "food",
+      date: "2026-08-29",
+      note: cloudNote,
+    })
+    expect(insertError).toBeNull()
 
     await page.goto("/transactions")
     await page.evaluate(
@@ -159,36 +168,31 @@ test.describe("authenticated cloud workspace", () => {
     await expect(
       page.getByText("Cloud workspace", { exact: true }).first()
     ).toBeVisible()
+    await expect(page.getByText(cloudNote)).toBeVisible()
+    expect(
+      await page.evaluate(async () => {
+        const databases = await indexedDB.databases()
+        return databases.some((database) =>
+          database.name?.startsWith("coin-account-")
+        )
+      })
+    ).toBe(false)
 
     await context.setOffline(true)
-    await expect(page.getByText(/offline/i).first()).toBeVisible()
-    await page.getByTestId("add-transaction-desktop").click()
-    await page.getByLabel("Amount in IDR").fill("33000")
-    await page.getByLabel("Note").fill(offlineNote)
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Add transaction" })
-      .click()
-    await expect(page.getByText(offlineNote)).toBeVisible()
-    await expect(page.getByText(/1 change waiting to sync/i)).toBeVisible()
+    await expect(page.getByText("Viewing previously loaded data")).toBeVisible()
+    await expect(page.getByText(cloudNote)).toBeVisible()
+    await expect(page.getByTestId("add-transaction-desktop")).toBeDisabled()
 
     await context.setOffline(false)
-    await expect
-      .poll(async () => {
-        const { data: persisted } = await client
-          .from("transactions")
-          .select("id")
-          .eq("note", offlineNote)
-          .is("deleted_at", null)
-        return persisted?.length ?? 0
-      })
-      .toBe(1)
-    await expect(page.getByText(/1 change waiting to sync/i)).toHaveCount(0)
+    await expect(page.getByText("Viewing previously loaded data")).toHaveCount(
+      0
+    )
+    await expect(page.getByTestId("add-transaction-desktop")).toBeEnabled()
 
     const { error: cleanupError } = await client
       .from("transactions")
       .update({ deleted_at: new Date().toISOString() })
-      .eq("note", offlineNote)
+      .eq("note", cloudNote)
     expect(cleanupError).toBeNull()
   })
 })

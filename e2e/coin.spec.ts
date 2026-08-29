@@ -14,7 +14,9 @@ test("keeps chart tooltips stable for display labels outside the chart config", 
   const spendingChart = desktopOverview.getByTestId("spending-chart")
 
   await page.getByTestId("add-transaction-desktop").click()
-  await page.getByLabel("Amount in IDR").fill("125000")
+  const amountInput = page.getByLabel("Amount in IDR")
+  await amountInput.fill("125000")
+  await expect(amountInput).toHaveValue("125.000")
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Add transaction" })
@@ -396,12 +398,11 @@ test("uses a bottom dock and transaction drawer on mobile", async ({
 
   await page.getByRole("link", { name: "Budgets" }).click()
   await expect(page).toHaveURL(/\/budgets$/)
-  await expect(page.getByRole("heading", { name: "Budgets" })).toBeVisible()
   await expect(page.getByTestId("route-stage")).toHaveAttribute(
     "data-view",
     "budgets"
   )
-  await page.getByRole("button", { name: "Add budget" }).click()
+  await page.getByRole("button", { name: "Set the first budget" }).click()
   await expect(page.getByTestId("budget-drawer")).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Set a monthly budget" })
@@ -468,7 +469,7 @@ test("labels the guest workspace and offers Google account mode", async ({
   await page.locator('[data-app-ready="true"]').waitFor()
 
   await expect(
-    page.getByRole("heading", { name: "Profile", exact: true })
+    page.getByRole("heading", { name: "Guest profile", exact: true })
   ).toBeVisible()
   await expect(page.getByText("Saved on this device")).toBeVisible()
   await expect(page.getByText("Indonesian rupiah")).toBeVisible()
@@ -500,7 +501,7 @@ test("labels the guest workspace and offers Google account mode", async ({
   await page.getByRole("button", { name: "Continue with Google" }).click()
 
   const signInDialog = page.getByRole("dialog", {
-    name: "Sync your finances",
+    name: "Open your cloud workspace",
   })
   await expect(signInDialog).toBeVisible()
   await expect(
