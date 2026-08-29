@@ -86,6 +86,7 @@ type TransactionDialogProps = {
   onOpenChange: (open: boolean) => void
   categories: Category[]
   transaction?: FinanceTransaction
+  disabled?: boolean
   onCreateCategory: (name: string, type: TransactionType) => Promise<Category>
   onSubmit: (transaction: NewTransaction) => Promise<void>
 }
@@ -95,6 +96,7 @@ export function TransactionDialog({
   onOpenChange,
   categories,
   transaction,
+  disabled = false,
   onCreateCategory,
   onSubmit,
 }: TransactionDialogProps) {
@@ -521,7 +523,7 @@ export function TransactionDialog({
           </DrawerHeader>
           {form}
           <DrawerFooter className="border-t">
-            <Button type="submit" form={formId} disabled={saving}>
+            <Button type="submit" form={formId} disabled={saving || disabled}>
               {transaction ? (
                 <CheckIcon data-icon="inline-start" />
               ) : (
@@ -559,7 +561,7 @@ export function TransactionDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button type="submit" form={formId} disabled={saving}>
+          <Button type="submit" form={formId} disabled={saving || disabled}>
             {transaction ? (
               <CheckIcon data-icon="inline-start" />
             ) : (

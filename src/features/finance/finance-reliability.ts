@@ -1,6 +1,6 @@
 import type { FinanceSnapshot } from "@/data/finance-repository.types"
 
-export type FinanceIssueSource = "load" | "mutation" | "sync"
+export type FinanceIssueSource = "load" | "mutation"
 export type FinanceIssueKind = "offline" | "request"
 
 export type FinanceIssue = {
@@ -66,22 +66,4 @@ export function financeIssueFrom(
 
 export function safeFinanceError(issue: FinanceIssue) {
   return new Error(issue.message)
-}
-
-export function syncIssueFrom(online = browserIsOnline()): FinanceIssue {
-  return online
-    ? {
-        source: "sync",
-        kind: "request",
-        title: "Some changes are waiting to sync",
-        message:
-          "Your changes are safe on this device. Coin will retry when the cloud connection is available.",
-      }
-    : {
-        source: "sync",
-        kind: "offline",
-        title: "Working offline",
-        message:
-          "Changes are saved on this device and will sync when Coin is open and online.",
-      }
 }

@@ -15,6 +15,7 @@ describe("CloudWorkspaceStatus", () => {
         state="loading"
         issue={null}
         isRefreshing
+        hasSnapshot={false}
         onRetry={() => undefined}
       />
     )
@@ -28,6 +29,7 @@ describe("CloudWorkspaceStatus", () => {
         state="empty"
         issue={null}
         isRefreshing={false}
+        hasSnapshot
         onRetry={() => undefined}
       />
     )
@@ -44,6 +46,7 @@ describe("CloudWorkspaceStatus", () => {
         state="error"
         issue={financeIssueFrom("load", true)}
         isRefreshing={false}
+        hasSnapshot={false}
         onRetry={onRetry}
       />
     )
@@ -62,6 +65,7 @@ describe("CloudWorkspaceStatus", () => {
         state="ready"
         issue={financeIssueFrom("mutation", true)}
         isRefreshing={false}
+        hasSnapshot
         onRetry={onRetry}
       />
     )
@@ -69,5 +73,37 @@ describe("CloudWorkspaceStatus", () => {
     expect(screen.getByText("Change was not saved")).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Refresh data" }))
     expect(onRetry).toHaveBeenCalledOnce()
+  })
+
+  it("keeps a loaded account snapshot visible as read-only while offline", () => {
+    render(
+      <CloudWorkspaceStatus
+        state="offline"
+        issue={financeIssueFrom("load", false)}
+        isRefreshing={false}
+        hasSnapshot
+        onRetry={() => undefined}
+      />
+    )
+
+    expect(screen.getByText("Viewing previously loaded data")).toBeTruthy()
+    expect(screen.getByText(/snapshot is read-only/)).toBeTruthy()
+  })
+
+  it("shows account placeholders after an offline reload", () => {
+    render(
+      <CloudWorkspaceStatus
+        state="offline"
+        issue={financeIssueFrom("load", false)}
+        isRefreshing={false}
+        hasSnapshot={false}
+        onRetry={() => undefined}
+      />
+    )
+
+    expect(screen.getByText("Connect to load your account")).toBeTruthy()
+    expect(
+      screen.getByLabelText("Account data unavailable offline")
+    ).toBeTruthy()
   })
 })

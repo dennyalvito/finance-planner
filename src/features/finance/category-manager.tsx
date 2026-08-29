@@ -65,6 +65,7 @@ type CategoryManagerProps = {
   onOpenChange: (open: boolean) => void
   categories: Category[]
   canCustomize: boolean
+  readOnly?: boolean
   onSignIn: () => void
   onCreateCategory: (name: string, type: TransactionType) => Promise<Category>
   onUpdateCategory: (id: string, name: string) => Promise<void>
@@ -76,6 +77,7 @@ export function CategoryManager({
   onOpenChange,
   categories,
   canCustomize,
+  readOnly = false,
   onSignIn,
   onCreateCategory,
   onUpdateCategory,
@@ -96,7 +98,7 @@ export function CategoryManager({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitted(true)
-    if (!canCustomize || name.trim().length < 2) return
+    if (!canCustomize || readOnly || name.trim().length < 2) return
 
     setSaving(true)
     try {
@@ -172,23 +174,10 @@ export function CategoryManager({
                         <span className="min-w-0 flex-1 truncate text-sm">
                           {category.name}
                         </span>
-                        {category.syncStatus && (
-                          <Badge
-                            variant={
-                              category.syncStatus === "conflict"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                          >
-                            {category.syncStatus === "conflict"
-                              ? "Conflict"
-                              : "Pending"}
-                          </Badge>
-                        )}
-                        {category.isCustom && !category.syncStatus && (
+                        {category.isCustom && (
                           <Badge variant="outline">Custom</Badge>
                         )}
-                        {category.isCustom && canCustomize && (
+                        {category.isCustom && canCustomize && !readOnly && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -234,7 +223,7 @@ export function CategoryManager({
         {canCustomize ? (
           <form id={formId} onSubmit={handleSubmit}>
             <FieldGroup>
-              <Field>
+              <Field data-disabled={readOnly}>
                 <FieldLabel id="new-category-type">Category type</FieldLabel>
                 <ToggleGroup
                   type="single"
@@ -245,6 +234,7 @@ export function CategoryManager({
                   variant="selection"
                   spacing={2}
                   aria-labelledby="new-category-type"
+                  disabled={readOnly}
                   className="grid grid-cols-2"
                 >
                   <ToggleGroupItem value="expense" className="w-full">
@@ -255,7 +245,7 @@ export function CategoryManager({
                   </ToggleGroupItem>
                 </ToggleGroup>
               </Field>
-              <Field data-invalid={nameInvalid}>
+              <Field data-invalid={nameInvalid} data-disabled={readOnly}>
                 <FieldLabel htmlFor="new-category-name">
                   New category
                 </FieldLabel>
@@ -267,8 +257,9 @@ export function CategoryManager({
                     placeholder="Pet care"
                     maxLength={40}
                     aria-invalid={nameInvalid}
+                    disabled={readOnly}
                   />
-                  <Button type="submit" disabled={saving}>
+                  <Button type="submit" disabled={saving || readOnly}>
                     <PlusIcon data-icon="inline-start" />
                     {saving ? "Adding…" : "Add"}
                   </Button>
@@ -287,7 +278,7 @@ export function CategoryManager({
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
               Guest mode includes Coin&apos;s starter categories. Sign in to add
-              categories that sync with your account.
+              categories stored in your account.
             </p>
             <Button variant="outline" onClick={onSignIn}>
               Sign in to customize

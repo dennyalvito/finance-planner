@@ -67,6 +67,7 @@ type BudgetDialogProps = {
   categories: Category[]
   budgets: Budget[]
   initialCategoryId?: string
+  disabled?: boolean
   onSubmit: (categoryId: string, amount: number) => Promise<void>
   onDelete: (categoryId: string, month: string) => Promise<void>
 }
@@ -77,6 +78,7 @@ export function BudgetDialog({
   categories,
   budgets,
   initialCategoryId,
+  disabled = false,
   onSubmit,
   onDelete,
 }: BudgetDialogProps) {
@@ -166,7 +168,7 @@ export function BudgetDialog({
         <Button
           type="button"
           variant="destructive"
-          disabled={saving || deleting}
+          disabled={saving || deleting || disabled}
         >
           <Trash2Icon data-icon="inline-start" />
           Remove budget
@@ -284,7 +286,7 @@ export function BudgetDialog({
           {form}
           <DrawerFooter className="border-t">
             {deleteButton}
-            <Button type="submit" form={formId} disabled={saving}>
+            <Button type="submit" form={formId} disabled={saving || disabled}>
               <GaugeIcon data-icon="inline-start" />
               {saving ? "Saving..." : "Save budget"}
             </Button>
@@ -312,7 +314,7 @@ export function BudgetDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button type="submit" form={formId} disabled={saving}>
+          <Button type="submit" form={formId} disabled={saving || disabled}>
             <GaugeIcon data-icon="inline-start" />
             {saving ? "Saving..." : "Save budget"}
           </Button>

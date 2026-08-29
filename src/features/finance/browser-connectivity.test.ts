@@ -34,7 +34,7 @@ describe("browser connectivity", () => {
     document.dispatchEvent(new Event("visibilitychange"))
 
     expect(onChange).toHaveBeenCalledTimes(2)
-    expect(onChange).toHaveBeenNthCalledWith(1, true, "change")
+    expect(onChange).toHaveBeenNthCalledWith(1, true, "resume")
     expect(onChange).toHaveBeenNthCalledWith(2, true, "resume")
 
     visibilityState = "visible"
