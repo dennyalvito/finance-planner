@@ -6,6 +6,8 @@ Whatever action you can do yourself, Please do yourself, this includes starting 
 
 Coin uses TanStack Start, React, TypeScript, Dexie guest storage, and Google-only Supabase account storage. Put routes in `src/routes/`, features in `src/features/`, shared UI in `src/components/`, finance rules in `src/domain/`, and adapters in `src/data/`. UI reaches persistence only through repositories. Read `PRD.md` and `NEXT_STAGE.md` before product work.
 
+Storage selection is an invariant: guests use Dexie for online/offline CRUD, while authenticated finance reads and writes go directly to Supabase. Authenticated finance data may live in React memory for the current page session, but must never be persisted or queued in IndexedDB, Cache Storage, or the service worker. Loaded account data is read-only offline; a cold offline reload shows placeholders until reconnection.
+
 The MVP has one unified ledger starting at zero. Net recorded cash flow equals income minus expenses; it is not a real account balance. Store IDR as integer rupiah, never floating-point values.
 
 ## Build, Test, and Development Commands

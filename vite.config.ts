@@ -44,7 +44,7 @@ const config = defineConfig(async ({ mode }) => ({
               name: "Coin",
               short_name: "Coin",
               description:
-                "A private, local-first finance planner for income, expenses, and monthly budgets.",
+                "A private finance planner for income, expenses, and monthly budgets.",
               lang: "en",
               start_url: "/",
               scope: "/",
