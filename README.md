@@ -1,6 +1,6 @@
 # Coin
 
-Coin is a private, local-first finance planner for one unified ledger. It
+Coin is a private finance planner for one unified ledger. It
 records income, expenses, optional category budgets, and account-owned custom
 categories in Indonesian rupiah (IDR). The headline value is recorded net cash
 flow—income minus expenses—not a bank account balance.
@@ -14,11 +14,17 @@ transaction activity, budgets, and profile/settings.
 - **Guest mode** stores data in Dexie/IndexedDB in the current browser and
   works without an account or network.
 - **Account mode** uses Google-only Supabase OAuth and stores data in Supabase
-  Postgres under Row Level Security.
+  Postgres under Row Level Security. Finance CRUD goes directly to Supabase;
+  fetched data is retained only in React memory for the current page session.
 
 These are separate workspaces. Signing in never uploads or deletes guest data,
 and signing out restores the preserved guest workspace. Explicit guest import
 is planned for the next stage.
+
+If an account user loses connectivity after loading data, that snapshot remains
+visible but read-only. A cold offline reload shows the cached PWA shell, offline
+status, and finance placeholders until reconnection. Account finance data is
+never stored in IndexedDB or queued for later synchronization.
 
 ## Local development
 
@@ -88,8 +94,9 @@ in `src/features/auth/`, routes in `src/routes/`, and product UI in
 
 `pnpm test:db` requires a running local Supabase stack and Docker. Authenticated
 browser tests require dedicated test credentials and are skipped otherwise.
-See [authenticated verification](./AUTHENTICATED_VERIFICATION.md) for the
-RLS, cloud persistence, sign-out restoration, and Google identity checks.
+See [authenticated verification](./AUTHENTICATED_VERIFICATION.md) for physical
+deletion/RLS checks, direct cloud persistence, account offline behavior,
+sign-out restoration, and Google identity checks.
 
 Read [PRD.md](./PRD.md) for product requirements and
 [NEXT_STAGE.md](./NEXT_STAGE.md) for the current implementation handoff and

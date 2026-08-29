@@ -1,497 +1,275 @@
 # Coin Product Requirements Document
 
-Status: Core MVP, complete finance CRUD, and authenticated offline sync implemented
+Status: Core MVP and online-first account storage implemented
 
-Last updated: 2026-08-10
+Last updated: 2026-08-29
 
 Execution handoff: [NEXT_STAGE.md](./NEXT_STAGE.md)
 
 ## 1. Product summary
 
-Coin is a private, local-first personal finance planner for recording income,
-expenses, categories, and monthly category budgets in Indonesian rupiah (IDR).
-It presents the net movement of the transactions a user has recorded; it does
-not claim to know a real bank account balance.
+Coin is a private personal finance planner for recording income, expenses,
+categories, and monthly category budgets in Indonesian rupiah (IDR). It presents
+the net movement of the transactions a user records; it does not claim to know a
+real bank account balance.
 
-The current MVP is a responsive web application with a unified ledger,
-dashboard summaries, cash-flow and spending charts, transaction management,
-custom categories, and monthly budgets. Guest data is stored in the browser
-with Dexie and IndexedDB. Signed-in users have a separate account-backed
-workspace in Supabase Postgres. Using Coin without an account remains a
-complete, first-class experience.
+Coin has two deliberately separate workspaces. Guest mode is a complete
+browser-local experience backed by Dexie/IndexedDB and works online or offline.
+Account mode is an online-first cloud experience: authenticated finance reads
+and writes go directly to Supabase, and fetched data exists only in React memory
+for the current page session.
 
 ## 2. Product principles
 
-1. **Guest mode is real usage, not a demo.** A user can use the core planner
-   without creating an account.
-2. **Storage mode is understandable.** Coin must clearly communicate whether
-   data is stored in this browser or in the signed-in user's cloud workspace.
-3. **No silent data movement.** Guest data is never uploaded, merged, or
-   deleted without an explicit user action.
-4. **Financial values remain exact.** IDR amounts are stored as integer rupiah,
-   never floating-point values.
-5. **The ledger starts at zero.** Recorded net cash flow is income minus
+1. **Guest mode is real usage, not a demo.** Core planning works without an
+   account or network.
+2. **Account mode favors the common online case.** Supabase is the only
+   persistent store for authenticated finance data.
+3. **Storage mode is understandable.** Coin clearly identifies device and cloud
+   workspaces.
+4. **No silent data movement.** Guest data is never uploaded, merged, or deleted
+   without an explicit user action.
+5. **Financial values remain exact.** IDR amounts are integer rupiah, never
+   floating-point values.
+6. **The ledger starts at zero.** Recorded net cash flow is income minus
    expenses, not an account balance.
-6. **Authorization is enforced in the database.** UI checks are not treated as
-   a security boundary.
+7. **Authorization is enforced in the database.** UI checks are not a security
+   boundary.
 
-## 3. Current product scope
-
-### Implemented
+## 3. Implemented capabilities
 
 - Responsive desktop sidebar and mobile navigation dock
 - Overview, transactions, budgets, and settings routes
-- Income and expense transaction creation
-- Transaction editing from transaction history and recent overview activity in
-  both guest and account workspaces
-- Transaction deletion
-- Built-in categories for guests and account-owned custom categories
-- Rename and guarded deletion for account-owned custom categories; category
-  type and stable ID remain immutable, and categories in use cannot be deleted
+- Transaction create, edit, and delete in guest and account workspaces
+- Built-in transaction categories and account-owned custom categories
+- Rename and guarded physical deletion for custom categories; stable identity
+  and type remain immutable, and foreign keys protect categories in use
 - Monthly category budgets with create, adjust, and remove actions
-- Recorded income, expenses, net movement, and savings-rate calculations
-- Cash-flow and category-spending charts
-- Mobile period filtering defaults to Today, with presets and separate From/To
-  calendar dialogs that support direct month and year selection
-- Transaction history summaries, date/type filters, date grouping, and row
-  actions for editing or deleting an entry
-- Semantic negative styling for expense amounts in transaction activity
-- A visually emphasized amount field in mobile transaction entry
-- Dexie/IndexedDB persistence
-- Google-only Supabase OAuth and account-mode cloud persistence backed by a
-  per-user IndexedDB cache and pending-sync outbox
+- Recorded income, expenses, net movement, keep-rate calculations, cash-flow
+  charts, and category-spending charts
+- Transaction summaries, date/type filters, date grouping, and activity actions
+- Dexie/IndexedDB persistence for guest finance data
+- Google-only Supabase OAuth and direct account-mode Supabase persistence
 - Storage-mode indicators in navigation, profile, and settings
 - Cloud loading, empty, offline, failed-load, failed-mutation, and retry UX
-- Transactional RLS tests and an authenticated browser verification workflow
-- Empty first-visit guest ledger with built-in transaction categories
-- Installable PWA metadata, platform icons, and a service worker that precaches
-  TanStack Start's generated SPA shell so guest and cached account workspaces
-  can reload or cold-launch offline
-- Signed-in offline CRUD for transactions, custom categories, and budgets after
-  the account has been loaded once on that device
-- Per-record multi-device conflict detection with explicit cloud/device choices,
-  including edit-versus-delete conflicts
-- A destructive sign-out warning when changes are still pending on the device
-- Unit tests for finance calculations
-- Playwright coverage for critical guest workflows
+- Refetch on reconnect, window focus, and document resume/visibility
+- Physical cloud deletes protected by least-privilege grants and owner-scoped
+  Row Level Security
+- Installable PWA metadata and a service worker that precaches the generated
+  application shell
+- Unit/component, guest browser, offline-PWA, authenticated browser, and pgTAP
+  coverage
 
-### Current limitations
+## 4. Current limitations
 
-- Guest data is available only in the browser profile where it was created.
-- Clearing site data removes the guest ledger.
-- A signed-in account must be loaded online once before that account can be used
-  offline on a new device or cleared browser profile.
-- There is no guest-to-account import flow yet.
-- The authenticated browser workflow needs dedicated test credentials to run.
-- The local RLS suite needs Docker and a running local Supabase stack.
-- Real Google identity continuity remains a manual verification.
-- Account synchronization runs only while Coin is open or reopened online;
-  there is no service-worker background sync or Realtime subscription.
-- Logical deletion tombstones do not yet have a server-side retention cleanup.
+- Guest data exists only in the browser profile where it was created; clearing
+  site data removes it.
+- Guest and account workspaces cannot yet be imported or merged.
+- Account finance actions require a network connection.
+- A cold offline reload of an authenticated session cannot restore prior cloud
+  finance data because account data is intentionally not persisted locally.
+- The authenticated browser workflow requires dedicated synthetic credentials.
+- Local database and pgTAP verification requires Docker or Podman.
+- A real Google identity continuity check remains manual.
+- There is no Realtime subscription or service-worker background sync.
+- Export, backup, account deletion, and cloud-data deletion policies are not yet
+  defined.
 
-## 4. Goals for the backend stage
+## 5. Workspace matrix
 
-### Primary goals
+| Behavior                     | Guest workspace     | Account workspace                                             |
+| ---------------------------- | ------------------- | ------------------------------------------------------------- |
+| Authentication               | None                | Supabase Auth                                                 |
+| Persistent store             | Dexie/IndexedDB     | Supabase Postgres                                             |
+| In-page snapshot             | Dexie live query    | React memory                                                  |
+| Finance writes               | Dexie               | Direct awaited Supabase request                               |
+| Online use                   | Full CRUD           | Full CRUD                                                     |
+| Offline after data is loaded | Full CRUD           | Read-only in-memory snapshot                                  |
+| Cold offline reload          | Restores guest data | Shell, offline banner, placeholders, disabled finance actions |
+| Reconnect                    | Dexie continues     | Automatically refetches Supabase                              |
+| Local account cache/outbox   | None                | None                                                          |
 
-- Establish Supabase project structure and versioned database migrations.
-- Add a secure, user-owned cloud data model for transactions, categories, and
-  budgets.
-- Prepare Supabase Auth without making authentication mandatory.
-- Introduce a repository boundary so presentation code does not know whether
-  Dexie or Supabase stores the data.
-- Preserve all existing guest behavior and guest data.
-- Make the active storage mode visible to the user.
+Signing in changes the active repository from guest Dexie to the user's
+Supabase workspace. Signing out immediately restores the preserved guest
+workspace. Neither transition uploads, deletes, or merges guest data.
 
-### Success criteria
+## 6. Architecture and repository selection
 
-- A guest can continue using Coin with no Supabase configuration or network.
-- A signed-in user can only access their own cloud data.
-- Signing out returns the browser to its preserved guest workspace.
-- No Supabase secret or service-role key is shipped to the browser.
-- Database schema and Row Level Security policies are reproducible from source
-  control.
-- Existing finance rules and IDR semantics behave identically in both storage
-  modes.
-
-## 5. Non-goals for the first backend release
-
-- Bank connections or automatic transaction ingestion
-- Multi-currency support
-- Shared, household, or organization workspaces
-- Service-worker background synchronization while Coin is closed
-- Automatic conflict resolution that silently overwrites either device
-- Realtime subscriptions
-- Automatic background migration of guest data
-- A custom application server when Supabase Auth, Postgres, Data API, and Row
-  Level Security satisfy the requirement
-
-## 6. Users and storage modes
-
-### Guest mode
-
-- Authentication: none
-- Data store: Dexie/IndexedDB
-- Scope: the current browser profile
-- Network requirement: none for core finance operations
-- Data lifecycle: remains local until the user explicitly clears it or imports
-  it into a cloud workspace
-
-### Account mode
-
-- Authentication: Supabase Auth
-- System of record: Supabase Postgres through the user-scoped Supabase client
-- Device cache and outbox: a user-scoped Dexie/IndexedDB database
-- Scope: the authenticated user
-- Network requirement: required for the first load on a device and for cloud
-  synchronization; cached finance CRUD remains available offline afterward
-- Authorization: PostgreSQL Row Level Security
-
-### Switching modes
-
-- Signing in switches the active workspace from guest Dexie data to the user's
-  Supabase data.
-- Signing out switches back to the existing guest Dexie workspace.
-- Switching modes does not delete either workspace.
-- Coin must show a storage indicator such as `On this device` or `Cloud
-workspace` to prevent confusion.
-
-This remains a dual-workspace model: guest records are never synchronized into
-the account workspace automatically. Account records do synchronize between the
-per-user device cache and that user's Supabase workspace.
-
-## 7. First-login and guest-data strategy
-
-The first time a user signs in on a browser that contains meaningful guest
-data, Coin should present an explicit choice:
-
-1. **Import guest data to the cloud** — copy eligible local records into the
-   user's cloud workspace after showing a summary and receiving confirmation.
-2. **Keep workspaces separate** — open the existing cloud workspace without
-   uploading local data.
-
-Recommended behavior:
-
-- Never import legacy seeded example transactions.
-- Import in one database transaction or an idempotent server operation.
-- Preserve local guest data after a successful import until the user separately
-  chooses to remove it.
-- Use stable import identifiers or an import ledger to prevent duplicate
-  imports when a request is retried.
-- If the cloud workspace already contains data, require a second confirmation
-  before merging.
-
-The import flow should be implemented after the base cloud repository and auth
-flow are working. Until then, guest and account workspaces remain separate.
-
-## 8. Technical architecture
-
-### Current frontend stack
-
-- TanStack Start and TanStack Router
-- React 19 and TypeScript
-- Vite
-- Tailwind CSS v4
-- shadcn/ui with Radix primitives
-- Recharts
-- Dexie and `dexie-react-hooks`
-- Vitest and React Testing Library
-- Playwright
-- pnpm
-
-### Proposed backend stack
-
-- Supabase Auth for account identity and sessions
-- Supabase Postgres as the account-mode system of record
-- Supabase Data API through the official JavaScript client
-- PostgreSQL Row Level Security for user isolation
-- Supabase CLI migrations checked into `supabase/migrations`
-- Generated TypeScript database types checked into the repository
-
-### Application boundaries
-
-Finance UI and feature hooks should depend on a `FinanceRepository` contract,
-not on Dexie or Supabase directly.
-
-The contract should cover:
-
-- Listing transactions, categories, and budgets
-- Adding, updating, and deleting a transaction
-- Creating, renaming, and deleting a custom category
-- Saving and deleting a monthly category budget
-- Clearing legacy guest example transactions where supported
-- Refreshing or subscribing to repository changes
-
-The guest and account paths implement that contract:
-
-- `DexieFinanceRepository` for guest mode
-- A local-first account repository backed by user-scoped Dexie, with a Supabase
-  synchronization adapter for account mode
-
-An auth/session layer selects the active adapter:
+Finance UI depends on the shared `FinanceRepository` contract. Presentation
+components do not call Dexie or Supabase directly.
 
 ```text
-No authenticated user -> DexieFinanceRepository
-Authenticated user    -> AccountFinanceRepository + SupabaseFinanceSync
+Auth loading          -> no active repository
+Guest                 -> localFinanceRepository (Dexie)
+Authenticated online  -> SupabaseFinanceRepository
+Authenticated offline -> current React snapshot, read-only
 ```
 
-Domain calculations remain in `src/domain` and are shared by both modes.
-Presentation components must not call IndexedDB or Supabase directly.
+Authenticated mutations are pessimistic:
 
-## 9. Proposed cloud data model
+1. Send the operation directly to Supabase.
+2. Await a confirmed response before reporting success.
+3. Refetch the active cloud snapshot.
+4. Leave displayed data unchanged when the write fails.
 
-The initial schema should contain three finance tables. All timestamps use UTC.
+Connectivity, focus, and resume listeners only update read-only state or
+refetch. Overlapping reads are deduplicated, a mutation queues a newer snapshot
+when necessary, and responses from a superseded authenticated session are
+ignored.
+
+Account data must never be written to IndexedDB, a local outbox, Cache Storage,
+or the service worker. Supabase Auth may continue to persist its own session;
+that session is not finance data.
+
+## 7. Offline and PWA behavior
+
+The service worker precaches the application shell and static assets. It has no
+finance background-sync implementation.
+
+- Guest users can cold-launch, reload, read, and mutate their Dexie workspace
+  offline.
+- If an account user loses connectivity after a successful load, Coin keeps the
+  current React snapshot visible as read-only, displays an offline banner, and
+  disables finance actions.
+- If an authenticated page is reloaded while offline, the in-memory snapshot is
+  gone. Coin displays the shell, offline banner, em-dash summaries, chart/list
+  placeholders, and disabled finance actions.
+- When connectivity returns, Coin automatically reloads the current Supabase
+  workspace and restores finance actions after a snapshot is available.
+- Focus and resume events refetch online account data so changes made on another
+  device become visible without introducing conflict-resolution logic.
+
+## 8. Cloud data model
+
+All account tables use Row Level Security and owner-scoped policies.
 
 ### `categories`
 
-- `id`: text primary key
+- `id`: stable text primary key
 - `user_id`: nullable UUID referencing `auth.users`
 - `name`: text
 - `type`: `income` or `expense`
 - `is_custom`: boolean
 - `created_at`: timestamptz
-- `updated_at`: timestamptz
-- `revision`: positive bigint used for optimistic conflict detection
-- `deleted_at`: nullable tombstone timestamp
 
-Built-in categories use the existing stable text identifiers, such as `salary`
-and `food`, with `user_id = null`, and are readable by every authenticated
-user. Custom categories use globally unique text identifiers and must be owned
-by a user. This preserves the current domain identifiers and referential
-integrity.
+Built-in categories have `user_id = null`, stable IDs, and are readable but
+immutable. Custom categories are owned by one user. Category identity and type
+cannot change after creation.
 
 ### `transactions`
 
 - `id`: UUID primary key
 - `user_id`: UUID referencing `auth.users`
 - `type`: `income` or `expense`
-- `amount`: bigint with `amount > 0`
-- `category_id`: foreign key to `categories`
+- `amount`: positive safe-integer bigint
+- `category_id`: restricted foreign key to `categories`
 - `date`: date
 - `note`: text
 - `created_at`: timestamptz
-- `updated_at`: timestamptz
-- `revision`: positive bigint used for optimistic conflict detection
-- `deleted_at`: nullable tombstone timestamp
-
-The application must only convert `amount` to a JavaScript number after
-ensuring it is within JavaScript's safe integer range.
 
 ### `budgets`
 
 - `id`: UUID primary key
 - `user_id`: UUID referencing `auth.users`
-- `category_id`: foreign key to `categories`
-- `month`: date normalized to the first day of the month
-- `amount`: bigint with `amount > 0`
-- `updated_at`: timestamptz
-- `revision`: positive bigint used for optimistic conflict detection
-- `deleted_at`: nullable tombstone timestamp
+- `category_id`: restricted foreign key to `categories`
+- `month`: first day of the month
+- `amount`: positive safe-integer bigint
+- `updated_at`: timestamptz retained for the budget domain
 - Unique constraint on `(user_id, month, category_id)`
 
-The unique constraint makes budget saving an upsert instead of creating
-duplicates.
+Deletes are physical. Authenticated users have explicit `DELETE` grants but
+RLS permits deletion only for their own rows; built-in categories remain
+immutable, and category foreign keys reject deletion while a transaction or
+budget uses the category. Offline-sync revisions, tombstones, revision triggers,
+and sync-only timestamps are not part of the active schema.
 
-### Database invariants
+## 9. Authentication, security, and privacy
 
-- Finance tables have Row Level Security enabled.
-- Authenticated users can select, insert, and update only rows whose `user_id`
-  matches `auth.uid()`; browser-facing deletion is a guarded logical update.
-- Anonymous API requests cannot access private finance rows.
-- Custom category writes require `user_id = auth.uid()`.
-- Built-in categories are readable but cannot be changed by application users.
-- Ownership columns are indexed.
-- Transaction dates and category/type compatibility are validated by the
-  repository and, where practical, by database constraints or triggers.
-- Category identity and type are immutable after creation.
-- A category cannot be tombstoned while an active transaction or budget refers
-  to it.
-- Every update advances the record revision so stale offline writes are
-  detected instead of silently overwriting another device.
+- Authentication is optional at the product level and Google-only for account
+  mode.
+- Coin uses `supabase.auth.signInWithOAuth({ provider: "google" })`; there is
+  no Google SDK, iframe, direct ID-token exchange, or product email/password UI.
+- Browser configuration contains only the Supabase URL and publishable key.
+- Google credentials stay in Supabase; service-role credentials never ship to
+  the browser.
+- Every account query is scoped by `user_id` in addition to RLS.
+- Real credentials and financial data do not belong in source or fixtures.
+- Transaction values, notes, access tokens, and refresh tokens must not be
+  logged.
 
-## 10. Authentication strategy
+## 10. Testing requirements
 
-Authentication is optional at the product level but required for account mode.
+### Unit and component
 
-### Provider decision
-
-Coin uses Google authentication through Supabase Auth. The primary entry point
-is Coin's own branded application button, which calls
-`supabase.auth.signInWithOAuth({ provider: "google" })`. Supabase Auth owns the
-browser redirect to Google and the return to Coin. The application does not
-load Google Identity Services, render a Google iframe, or perform a direct
-ID-token exchange. There is no email/password, magic-link, or email OTP signup
-in the first release. Guest mode remains the alternative for users who do not
-want to use Google or create a cloud workspace. SMTP configuration is
-therefore not required.
-
-### Session behavior
-
-- Auth state is exposed through a single React provider/hook.
-- The provider has explicit `loading`, `guest`, and `authenticated` states.
-- Repository selection waits for the initial session check to avoid briefly showing the wrong workspace.
-- Expired or signed-out sessions return the app to guest mode without deleting local data.
-- OAuth returns users to the Coin route where they initiated sign-in.
-- Redirect URLs are allow-listed in Supabase for local development and production.
-
-### Client and server session scope
-
-The current finance experience is browser-driven, so the first release uses a browser Supabase client for authenticated data access. Before introducing authenticated server rendering or protected server routes, Coin should adopt cookie-based SSR session handling and validate users on the server.
-
-No module-level server client may contain user-specific session state.
-
-## 11. Security and privacy requirements
-
-- Use only the Supabase project URL and publishable key in browser environment
-  variables.
-- Never expose a Supabase secret or service-role key to client code.
-- Enable Row Level Security before account-mode data access is enabled.
-- Scope every account query by `user_id` in addition to relying on RLS.
-- Keep real financial data and credentials out of source control and test
-  fixtures.
-- Provide safe placeholders in `.env.example`; keep real values in ignored
-  local environment files.
-- Treat migrations and RLS policies as reviewed application code.
-- Test that one authenticated user cannot read or mutate another user's rows.
-- Avoid logging transaction notes, amounts, access tokens, or refresh tokens.
-
-## 12. Configuration
-
-Expected public client configuration:
-
-```bash
-VITE_SUPABASE_URL=
-VITE_SUPABASE_PUBLISHABLE_KEY=
-```
-
-The application must detect missing configuration and continue in guest mode
-without throwing or attempting cloud requests.
-
-The Google OAuth client ID and secret are configured only in Supabase Auth.
-Neither value is required by Coin's frontend runtime.
-
-Project-specific secrets used by CI, migration tooling, or future server code
-must not use the `VITE_` prefix.
-
-## 13. Delivery plan
-
-### Phase 0 — Product strategy (implemented)
-
-- Storage-mode behavior, Google-only auth, and the Settings-based import entry
-  point are decided and recorded.
-- The local-versus-hosted database test environment remains a Phase 5 decision.
-
-### Phase 1 — Supabase foundation (implemented)
-
-- Initialize Supabase CLI project files.
-- Add versioned schema migrations.
-- Add built-in category seed data.
-- Enable and test Row Level Security policies.
-- Add safe environment-variable documentation.
-- Generate database TypeScript types.
-- Do not change the active frontend data source in this phase.
-
-### Phase 2 — Repository boundary (implemented)
-
-- Define the storage-agnostic repository contract.
-- Adapt the existing Dexie implementation without changing guest behavior.
-- Implement the Supabase repository.
-- Add repository contract and mapping tests.
-
-### Phase 3 — Auth and mode selection (implemented)
-
-- Add auth session provider.
-- Add Google-only Supabase OAuth sign-in and sign-out UI.
-- Select the repository from resolved auth state.
-- Add clear storage-mode indicators and initial loading states.
-- Verify that sign-out restores the preserved guest workspace.
-- Verify the hosted Supabase authorize endpoint hands off to Google.
-
-Production-domain OAuth and a complete authenticated browser workflow remain
-Phase 5 verification work.
-
-### Phase 4 — Guest import
-
-- Detect meaningful guest data.
-- Add import preview and confirmation.
-- Implement idempotent import and failure recovery.
-- Verify that demo data is excluded and local data is preserved.
-
-### Phase 5 — Hardening
-
-- Add RLS isolation tests in CI.
-- Add authenticated Playwright workflows.
-- Add account-mode error and network-loss UX.
-- Document backup, deletion, and account lifecycle behavior.
-
-## 14. Testing requirements
-
-### Unit tests
-
-- Domain calculations remain storage-independent.
-- Row-to-domain mapping preserves integer amounts and dates.
-- Repository selection returns Dexie for guests and Supabase for authenticated
+- Finance calculations remain storage-independent.
+- Repository selection chooses Dexie for guests and Supabase for authenticated
   users.
-- Import planning excludes demo records and is idempotent.
+- Supabase row mapping preserves integer amounts and dates.
+- Account delete methods issue physical deletes.
+- Offline account status distinguishes a retained snapshot from a cold reload.
+- Connectivity listeners refetch without duplicating overlapping requests.
 
-### Repository contract tests
+### Database and security
 
-Both guest and account repositories should satisfy the same behavioral contract for:
+- Migrations apply to empty and previously synchronized/populated schemas.
+- Tombstoned child records are purged before tombstoned custom categories.
+- Anonymous requests cannot access finance tables.
+- Users can select, insert, update, and physically delete only permitted rows.
+- Built-in categories are immutable and categories in use remain protected.
+- Invalid amounts and duplicate monthly budgets are rejected.
+- Generated TypeScript types match the migrated schema.
+- Supabase security and performance advisors are reviewed after deployment.
 
-- Transaction creation, update, and deletion
-- Category creation
-- Budget upsert
-- Sorting and filtering expectations
-- Validation and useful error propagation
+### End to end
 
-### Database and security tests
+- Guest CRUD survives online and offline reloads through Dexie.
+- Account CRUD reaches Supabase directly and creates no account IndexedDB
+  database or outbox.
+- Loaded account data becomes read-only offline.
+- A cold offline account reload shows placeholders and disabled actions.
+- Reconnection, focus, and resume load current Supabase data.
+- Sign-out immediately restores the preserved guest workspace.
+- Google identity continuity is verified manually with a non-personal test
+  identity.
 
-- Migrations apply to an empty database.
-- Built-in categories are readable and immutable to normal users.
-- Unauthenticated requests cannot access finance rows.
-- User A cannot read, update, or delete User B's rows.
-- Invalid or non-positive amounts are rejected.
-- Duplicate monthly budgets are prevented.
+## 11. Delivery history
 
-### End-to-end tests
+- **Foundation:** responsive finance UI, domain rules, guest Dexie repository,
+  and guest browser coverage.
+- **Supabase foundation:** versioned schema, generated types, built-in
+  categories, grants, RLS, auth provider, and direct Supabase repository.
+- **PWA:** install metadata, shell precache, and offline guest reload coverage.
+- **Former offline account sync:** a per-user Dexie cache/outbox, tombstones,
+  revisions, conflict resolution, and pending sign-out guard were implemented
+  and later removed.
+- **Online-first account refactor (2026-08-29):** authenticated CRUD now goes
+  directly to Supabase, cloud snapshots live only in React memory, account
+  offline state is read-only, obsolete sync services/UI were removed, and the
+  database returned to physical owner-scoped deletes.
 
-- All existing guest workflows continue to pass without Supabase variables.
-- A user can sign in, create data, reload, and see the same cloud workspace.
-- A user can sign out and see the earlier guest workspace.
-- A failed network request does not falsely report a successful finance write.
-- The Settings import flow behaves according to the user's explicit choice.
+## 12. Next work
 
-## 15. Product and UX requirements
+1. Run pgTAP and migration verification in an environment with Docker/Podman,
+   then review Supabase advisors in the deployment target.
+2. Complete the environment-gated authenticated Playwright workflow.
+3. Implement explicit, previewed, idempotent guest import without automatic
+   merging.
+4. Configure production OAuth/deployment and verify a real Google test identity.
+5. Define export, backup, account deletion, and cloud-data deletion behavior.
 
-- Guest mode must not be framed as unsafe or incomplete.
-- Account mode should explain its benefit as backup and cross-device access.
-- Sign-in must not block the dashboard.
-- The active storage location must be visible in Settings and the profile area.
-- Destructive or data-moving actions require clear confirmation.
-- Cloud loading, empty, offline, and error states must be distinguishable.
-- Accessibility requirements of the existing shadcn-based UI continue to apply.
+## 13. Recorded decisions
 
-## 16. Open decisions
-
-1. If the cloud workspace already has data, should the first import release
-   support merging or require choosing one workspace?
-2. Is a local Docker-based Supabase stack required for CI, or will hosted
-   database tests be sufficient?
-3. What final production/custom domain should be allow-listed after the Vercel
-   deployment exists?
-4. What is the account and cloud-data deletion policy?
-
-## 17. Recorded initial decisions
-
-- Host the application on Vercel while keeping the Supabase project independently owned.
-- Keep guest mode entirely on Dexie.
-- Keep Supabase as the account system of record, with a per-user device cache
-  and compact client-side outbox for offline CRUD.
-- Use Google OAuth only; do not offer email-based signup.
-- Keep guest and account workspaces separate until an explicit import phase.
-- Offer import from Settings after sign-in rather than interrupting the first successful login.
-- Use migrations, least-privilege grants, and Row Level Security from the first database change.
-- Ship installable PWA support with a lean browser-managed update lifecycle;
-  do not add service-worker background sync.
-- Synchronize pending account changes while Coin is open or reopened online,
-  and require an explicit choice for same-record multi-device conflicts.
-- Defer Realtime until there is evidence it is needed.
+- Host the application on Vercel while keeping Supabase independently owned.
+- Keep guest storage entirely in Dexie and fully usable offline.
+- Keep authenticated finance storage online-only in Supabase; do not persist or
+  queue account finance data locally.
+- Keep the PWA shell and offline guest experience without service-worker
+  background sync.
+- Use Google OAuth only; do not offer product email-based signup.
+- Keep guest and account workspaces separate until an explicit import exists.
+- Use direct awaited cloud writes and read-only in-memory snapshots instead of
+  optimistic offline account writes or multi-device conflict resolution.
+- Use physical deletes with least-privilege grants, owner-scoped RLS, and
+  foreign-key category protection.
+- Refetch account data on reconnect, focus, and resume; defer Realtime until
+  evidence shows it is needed.

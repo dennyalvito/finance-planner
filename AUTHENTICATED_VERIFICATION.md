@@ -9,12 +9,13 @@ control.
 The optional pgTAP suite in
 `supabase/tests/database/finance_rls.test.sql` verifies migrations, grants,
 anonymous rejection, ownership isolation for all three finance tables,
-cross-user mutation rejection, immutable built-in categories, amount
-constraints, and unique monthly budgets.
+cross-user mutation rejection, owner-scoped physical deletes, immutable
+built-in categories, in-use category protection, amount constraints, and unique
+monthly budgets.
 
 To run it against a hosted project without Docker, open that project's
 Supabase SQL Editor, paste the complete test file, and run it. The final result
-table contains all 30 TAP assertions. Every row should start with `ok`; copy
+table contains all 42 TAP assertions. Every row should start with `ok`; copy
 any `not ok` row and its diagnostics when investigating a failure. If the SQL
 Editor asks whether to enable RLS for the script's temporary results table,
 choose **Run without RLS**. That table exists only inside the rolled-back test
@@ -46,8 +47,10 @@ COIN_E2E_USER_PASSWORD=
 The application dev server must receive the same URL and publishable key through
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Use a dedicated
 synthetic test user, never a personal account. The test signs in through the
-Supabase client, creates cloud data, reloads it, signs out through Coin, and
-confirms that the earlier guest workspace returns.
+Supabase client, creates cloud data through direct Supabase writes, reloads it,
+confirms that no account IndexedDB database exists, verifies loaded data becomes
+read-only offline, reconnects, signs out through Coin, and confirms that the
+earlier guest workspace returns.
 
 ```powershell
 pnpm test:e2e e2e/cloud.spec.ts
@@ -64,8 +67,12 @@ test identity because CI must not automate a real Google account:
 1. Sign in with the same Google identity used before the OAuth flow change.
 2. Confirm that its existing cloud transactions, categories, and budgets load.
 3. Add one synthetic transaction and reload Coin.
-4. Sign out, confirm the preserved guest workspace, then sign in again.
-5. Confirm the same cloud workspace returns.
+4. Go offline and confirm the loaded snapshot is read-only.
+5. Reload while offline and confirm the shell and placeholders appear without
+   account data.
+6. Reconnect and confirm the cloud workspace reloads.
+7. Sign out, confirm the preserved guest workspace, then sign in again.
+8. Confirm the same cloud workspace returns.
 
 Ownership remains keyed to the Supabase `auth.users.id`. Do not migrate or
 rewrite that identifier when changing OAuth presentation or redirect settings.
