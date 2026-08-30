@@ -495,6 +495,130 @@ test("uses the simplified mobile dock and period controls", async ({
   expect(hasOverflow).toBe(false)
 })
 
+test("opens a large mobile ledger progressively and keeps category details scrollable", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-08-30T12:00:00+07:00"))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/")
+  await page.locator('[data-app-ready="true"]').waitFor()
+
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("coin-finance")
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const categoryIds = [
+      "salary",
+      "freelance",
+      "gift",
+      "food",
+      "transport",
+      "housing",
+      "shopping",
+      "health",
+      "leisure",
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction("transactions", "readwrite")
+      const store = transaction.objectStore("transactions")
+
+      for (let index = 0; index < 90; index += 1) {
+        const categoryId = categoryIds[index % categoryIds.length]
+        store.put({
+          id: `performance-${index}`,
+          type: index % categoryIds.length < 3 ? "income" : "expense",
+          amount: 10_000 + index,
+          categoryId,
+          date: "2026-08-30",
+          note: `Performance fixture ${index}`,
+          createdAt: index,
+        })
+      }
+
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+    })
+    database.close()
+  })
+
+  await page.reload()
+  await page.locator('[data-app-ready="true"]').waitFor()
+  await expect(
+    page.getByTestId("mobile-recent-activity").getByText("See all")
+  ).toBeVisible()
+
+  await page.evaluate(() => {
+    const state = window as typeof window & {
+      firstLedgerRenderCount?: number
+    }
+    const captureFirstRender = () => {
+      const list = document.querySelector<HTMLElement>(
+        '[data-total-transactions="90"]'
+      )
+      if (!list || state.firstLedgerRenderCount !== undefined) return false
+      state.firstLedgerRenderCount = Number(list.dataset.renderedTransactions)
+      return true
+    }
+    const observer = new MutationObserver(() => {
+      if (captureFirstRender()) observer.disconnect()
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    captureFirstRender()
+  })
+
+  await page.getByTestId("mobile-recent-activity").getByText("See all").click()
+  await expect(page.getByTestId("responsive-drawer")).toBeVisible()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              firstLedgerRenderCount?: number
+            }
+          ).firstLedgerRenderCount
+      )
+    )
+    .toBe(18)
+  await expect(page.locator('[data-total-transactions="90"]')).toHaveAttribute(
+    "data-rendered-transactions",
+    "90"
+  )
+
+  await page.keyboard.press("Escape")
+  await expect(page.getByTestId("responsive-drawer")).toBeHidden()
+  await page
+    .getByRole("button", { name: "Open category activity details" })
+    .click()
+
+  const categoryScrollRegion = page.getByTestId("responsive-overlay-scroll")
+  await expect(categoryScrollRegion).toBeVisible()
+  await expect(categoryScrollRegion).toHaveAttribute(
+    "data-vaul-no-drag",
+    "true"
+  )
+  await expect(
+    categoryScrollRegion.locator('[data-slot="scroll-area-scrollbar"]')
+  ).toBeVisible()
+  const scrollState = await categoryScrollRegion
+    .locator('[data-slot="scroll-area-viewport"]')
+    .evaluate((element) => {
+      const styles = window.getComputedStyle(element)
+      return {
+        overflowY: styles.overflowY,
+        scrollable: element.scrollHeight > element.clientHeight,
+      }
+    })
+  expect(scrollState).toEqual({
+    overflowY: "scroll",
+    scrollable: true,
+  })
+})
+
 test("labels the guest workspace and offers Google account mode", async ({
   page,
 }) => {

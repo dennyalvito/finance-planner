@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import { Badge } from "@/components/ui/badge"
@@ -27,6 +27,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Progress } from "@/components/ui/progress"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { formatCompactRupiah } from "@/domain/finance"
 import type {
@@ -123,6 +125,7 @@ export function ResponsiveOverlay({
   description,
   children,
   className,
+  persistentScrollbar = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -130,6 +133,7 @@ export function ResponsiveOverlay({
   description: string
   children: ReactNode
   className?: string
+  persistentScrollbar?: boolean
 }) {
   const isMobile = useIsMobile()
 
@@ -144,14 +148,34 @@ export function ResponsiveOverlay({
             <DrawerTitle>{title}</DrawerTitle>
             <DrawerDescription>{description}</DrawerDescription>
           </DrawerHeader>
-          <div
-            className={cn(
-              "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))]",
-              className
-            )}
-          >
-            {children}
-          </div>
+          {persistentScrollbar ? (
+            <ScrollArea
+              type="always"
+              data-testid="responsive-overlay-scroll"
+              data-vaul-no-drag
+              className="min-h-0 flex-1"
+            >
+              <div
+                className={cn(
+                  "px-4 pb-[max(1rem,env(safe-area-inset-bottom))]",
+                  className
+                )}
+              >
+                {children}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div
+              data-testid="responsive-overlay-scroll"
+              data-vaul-no-drag
+              className={cn(
+                "coin-overlay-scroll min-h-0 flex-1 touch-pan-y overflow-y-scroll overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))]",
+                className
+              )}
+            >
+              {children}
+            </div>
+          )}
         </DrawerContent>
       </Drawer>
     )
@@ -164,9 +188,25 @@ export function ResponsiveOverlay({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <div className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
-          {children}
-        </div>
+        {persistentScrollbar ? (
+          <ScrollArea
+            type="always"
+            data-testid="responsive-overlay-scroll"
+            className="min-h-0 flex-1"
+          >
+            <div className={className}>{children}</div>
+          </ScrollArea>
+        ) : (
+          <div
+            data-testid="responsive-overlay-scroll"
+            className={cn(
+              "coin-overlay-scroll min-h-0 flex-1 overflow-y-scroll",
+              className
+            )}
+          >
+            {children}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -197,6 +237,7 @@ export function CategoryDetailOverlay({
         "Every category recorded in " + periodLabel.toLowerCase() + "."
       }
       className="flex flex-col gap-4 pb-4"
+      persistentScrollbar
     >
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-xl bg-muted/60 p-3">
@@ -315,6 +356,27 @@ export function ActivityHistoryOverlay({
   onClearDemo: () => Promise<void>
   canMutate: boolean
 }) {
+  const [contentReady, setContentReady] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setContentReady(false)
+      return
+    }
+
+    let secondFrame = 0
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        startTransition(() => setContentReady(true))
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      window.cancelAnimationFrame(secondFrame)
+    }
+  }, [open])
+
   return (
     <ResponsiveOverlay
       open={open}
@@ -323,7 +385,7 @@ export function ActivityHistoryOverlay({
       description="Review, filter, edit, or delete every recorded entry."
       className="pb-4"
     >
-      {open ? (
+      {open && contentReady ? (
         <TransactionsView
           categories={categories}
           transactions={transactions}
@@ -333,9 +395,25 @@ export function ActivityHistoryOverlay({
           onClearDemo={onClearDemo}
           canMutate={canMutate}
           embedded
+          progressive
         />
+      ) : open ? (
+        <ActivityHistoryPlaceholder />
       ) : null}
     </ResponsiveOverlay>
+  )
+}
+
+function ActivityHistoryPlaceholder() {
+  return (
+    <div
+      className="flex flex-col gap-6"
+      aria-label="Loading ledger activity"
+      role="status"
+    >
+      <Skeleton className="h-30 rounded-xl" />
+      <Skeleton className="h-72 rounded-xl" />
+    </div>
   )
 }
 

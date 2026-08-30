@@ -72,6 +72,7 @@ export function TransactionsView({
   onClearDemo,
   canMutate,
   embedded = false,
+  progressive = false,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
@@ -81,6 +82,7 @@ export function TransactionsView({
   onClearDemo: () => Promise<void>
   canMutate: boolean
   embedded?: boolean
+  progressive?: boolean
 }) {
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">(
     "all"
@@ -206,6 +208,7 @@ export function TransactionsView({
               detailed
               groupByDate
               readOnly={!canMutate}
+              progressive={progressive}
             />
           ) : (
             <Empty className="min-h-56">

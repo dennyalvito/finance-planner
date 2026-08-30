@@ -28,6 +28,7 @@ import {
 } from "@/domain/finance"
 import type { Category, FinanceTransaction } from "@/domain/finance"
 import { getCategoryIcon } from "@/features/finance/category-icon"
+import { useProgressiveItemLimit } from "@/features/finance/transactions/use-progressive-item-limit"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import {
@@ -49,6 +50,7 @@ export function TransactionList({
   groupByDate,
   hideDelete,
   readOnly = false,
+  progressive = false,
 }: {
   categories: Category[]
   transactions: FinanceTransaction[]
@@ -59,6 +61,7 @@ export function TransactionList({
   groupByDate?: boolean
   hideDelete?: boolean
   readOnly?: boolean
+  progressive?: boolean
 }) {
   const isMobile = useIsMobile()
   const [swipedTransactionId, setSwipedTransactionId] = useState<string | null>(
@@ -68,6 +71,14 @@ export function TransactionList({
   const categoriesById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
     [categories]
+  )
+  const renderLimit = useProgressiveItemLimit(transactions.length, progressive)
+  const renderedTransactions = useMemo(
+    () =>
+      renderLimit < transactions.length
+        ? transactions.slice(0, renderLimit)
+        : transactions,
+    [renderLimit, transactions]
   )
 
   useEffect(() => {
@@ -99,21 +110,38 @@ export function TransactionList({
     setDeleteTarget(transaction)
   }, [])
 
-  const groups = useMemo(() => {
+  const transactionGroups = useMemo(() => {
     if (!groupByDate) return []
 
-    return transactions.reduce<
-      Array<{ date: string; items: FinanceTransaction[] }>
-    >((result, transaction) => {
-      const current = result.at(-1)
-      if (current?.date === transaction.date) {
-        current.items.push(transaction)
-      } else {
-        result.push({ date: transaction.date, items: [transaction] })
-      }
-      return result
-    }, [])
+    return transactions
+      .reduce<Array<{ date: string; items: FinanceTransaction[] }>>(
+        (result, transaction) => {
+          const current = result.at(-1)
+          if (current?.date === transaction.date) {
+            current.items.push(transaction)
+          } else {
+            result.push({ date: transaction.date, items: [transaction] })
+          }
+          return result
+        },
+        []
+      )
+      .map((group) => ({
+        ...group,
+        summary: summarizeLedger(group.items),
+      }))
   }, [groupByDate, transactions])
+  const groups = useMemo(() => {
+    let remaining = renderLimit
+
+    return transactionGroups.flatMap((group) => {
+      if (remaining <= 0) return []
+
+      const items = group.items.slice(0, remaining)
+      remaining -= items.length
+      return [{ ...group, items, totalItems: group.items.length }]
+    })
+  }, [renderLimit, transactionGroups])
 
   if (!transactions.length) {
     return (
@@ -200,18 +228,22 @@ export function TransactionList({
             {row}
           </SwipeableTransactionRow>
         ) : (
-          <div key={transaction.id}>{row}</div>
+          <div
+            key={transaction.id}
+            className="[contain-intrinsic-size:auto_4rem] [content-visibility:auto]"
+          >
+            {row}
+          </div>
         )
       })}
     </div>
   )
 
   const listContent = !groupByDate ? (
-    renderRows(transactions)
+    renderRows(renderedTransactions)
   ) : (
     <div className="flex flex-col gap-5">
       {groups.map((group) => {
-        const dailySummary = summarizeLedger(group.items)
         return (
           <section key={group.date} className="flex flex-col gap-1.5">
             <header className="flex items-center justify-between gap-3 px-2">
@@ -220,20 +252,20 @@ export function TransactionList({
                   {formatTransactionGroupDate(group.date)}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {group.items.length}{" "}
-                  {group.items.length === 1 ? "entry" : "entries"}
+                  {group.totalItems}{" "}
+                  {group.totalItems === 1 ? "entry" : "entries"}
                 </p>
               </div>
               <p
                 className={cn(
                   "text-xs font-medium tabular-nums",
-                  dailySummary.net > 0 && "text-positive",
-                  dailySummary.net < 0 && "text-negative",
-                  dailySummary.net === 0 && "text-muted-foreground"
+                  group.summary.net > 0 && "text-positive",
+                  group.summary.net < 0 && "text-negative",
+                  group.summary.net === 0 && "text-muted-foreground"
                 )}
               >
-                Net {dailySummary.net > 0 ? "+" : ""}
-                {formatCompactRupiah(dailySummary.net)}
+                Net {group.summary.net > 0 ? "+" : ""}
+                {formatCompactRupiah(group.summary.net)}
               </p>
             </header>
             {renderRows(group.items)}
@@ -245,7 +277,13 @@ export function TransactionList({
 
   return (
     <>
-      {listContent}
+      <div
+        aria-busy={renderLimit < transactions.length}
+        data-rendered-transactions={renderLimit}
+        data-total-transactions={transactions.length}
+      >
+        {listContent}
+      </div>
       {deleteTarget && (
         <DeleteTransactionDialog
           open
@@ -281,7 +319,10 @@ const SwipeableTransactionRow = memo(
     const pointerStart = useRef<{ x: number; y: number } | null>(null)
 
     return (
-      <div data-swipe-row className="relative overflow-hidden rounded-xl">
+      <div
+        data-swipe-row
+        className="relative overflow-hidden rounded-xl [contain-intrinsic-size:auto_4rem] [content-visibility:auto]"
+      >
         <div
           aria-hidden={!open}
           className={cn(
