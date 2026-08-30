@@ -199,6 +199,11 @@
   animation: coin-route-enter 100ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.coin-overlay-scroll {
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
+}
+
 @media (min-width: 48rem) {
   html {
     scrollbar-gutter: stable;
