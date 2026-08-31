@@ -34,9 +34,8 @@ export function financeIssueFrom(
       ? {
           source,
           kind: "offline",
-          title: "Cloud workspace is offline",
-          message:
-            "Connect to the internet, then retry to load your cloud workspace.",
+          title: "Account data needs a connection",
+          message: "Reconnect to load your signed-in account data.",
         }
       : {
           source,
@@ -51,16 +50,15 @@ export function financeIssueFrom(
     ? {
         source,
         kind: "request",
-        title: "Cloud data could not be loaded",
+        title: "Account data could not be loaded",
         message:
-          "Your cloud workspace was not changed. Retry when your connection is stable.",
+          "Your data is safe. Check your connection and try loading it again.",
       }
     : {
         source,
         kind: "request",
         title: "Change was not saved",
-        message:
-          "Your cloud workspace was not updated. Review the form and try again.",
+        message: "Your account was not updated. Review the form and try again.",
       }
 }
 

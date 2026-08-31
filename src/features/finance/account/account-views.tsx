@@ -332,7 +332,7 @@ export function ProfileView({
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-medium">
-              {cloudWorkspace ? "Cloud workspace" : "On this device"}
+              {cloudWorkspace ? "Signed-in account" : "On this device"}
             </p>
             <p className="text-xs text-muted-foreground">
               {cloudWorkspace
@@ -340,7 +340,9 @@ export function ProfileView({
                 : "Your guest ledger stays in this browser."}
             </p>
           </div>
-          <Badge variant="outline">{cloudWorkspace ? "Cloud" : "Local"}</Badge>
+          <Badge variant="outline">
+            {cloudWorkspace ? "Account" : "Device"}
+          </Badge>
         </CardContent>
       </Card>
     </div>

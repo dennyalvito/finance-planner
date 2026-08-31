@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     const client = getSupabaseClient()
     if (!client) {
-      throw new Error("Cloud storage is not configured.")
+      throw new Error("Account sign-in is not configured.")
     }
 
     const redirectTo = new URL(window.location.href)

@@ -62,7 +62,7 @@ test.describe("authenticated cloud workspace", () => {
     await page.locator('[data-app-ready="true"]').waitFor()
 
     await expect(
-      page.getByText("Cloud workspace", { exact: true }).first()
+      page.getByText("Signed-in account", { exact: true }).first()
     ).toBeVisible()
     await expect(page.getByText(guestNote)).toHaveCount(0)
 

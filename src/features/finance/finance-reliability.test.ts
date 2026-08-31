@@ -13,9 +13,8 @@ describe("finance reliability messages", () => {
     expect(issue).toEqual({
       source: "load",
       kind: "offline",
-      title: "Cloud workspace is offline",
-      message:
-        "Connect to the internet, then retry to load your cloud workspace.",
+      title: "Account data needs a connection",
+      message: "Reconnect to load your signed-in account data.",
     })
   })
 
@@ -24,7 +23,7 @@ describe("finance reliability messages", () => {
     const error = safeFinanceError(issue)
 
     expect(error.message).toBe(
-      "Your cloud workspace was not updated. Review the form and try again."
+      "Your account was not updated. Review the form and try again."
     )
     expect(error.message).not.toContain("supabase")
     expect(error.message).not.toContain("http")

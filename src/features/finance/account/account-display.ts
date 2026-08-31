@@ -1,5 +1,5 @@
 export function accountLabel(email?: string) {
-  return email ?? "Cloud account"
+  return email ?? "Coin account"
 }
 
 export function accountInitials(value?: string) {
