@@ -174,7 +174,7 @@ export function CoinSidebar({
       <SidebarFooter className="p-4 group-data-[collapsible=icon]:p-2">
         <div className="rounded-xl bg-sidebar-accent p-3 group-data-[collapsible=icon]:hidden">
           <p className="text-xs font-medium">
-            {cloudWorkspace ? "Cloud workspace" : "On this device"}
+            {cloudWorkspace ? "Signed-in account" : "On this device"}
           </p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {cloudWorkspace

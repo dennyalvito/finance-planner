@@ -421,7 +421,7 @@ test("uses the simplified mobile dock and period controls", async ({
   await expect(
     page.getByTestId("mobile-recent-activity").getByText("-Rp 150 rb")
   ).toBeVisible()
-  await page.waitForTimeout(250)
+  await expect(page.getByTestId("transaction-drawer")).toBeHidden()
 
   await swipeMobileTransaction()
   const deleteButton = page.getByRole("button", {
@@ -673,7 +673,7 @@ test("labels the guest workspace and offers Google account mode", async ({
     .click()
 
   const signInDialog = page.getByRole("dialog", {
-    name: "Open your cloud workspace",
+    name: "Use Coin across devices",
   })
   await expect(signInDialog).toBeVisible()
   await expect(

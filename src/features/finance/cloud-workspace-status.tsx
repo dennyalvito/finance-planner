@@ -39,7 +39,7 @@ function LoadingCloudWorkspace() {
   return (
     <div
       className="flex flex-col gap-4"
-      aria-label="Loading cloud workspace"
+      aria-label="Loading account data"
       role="status"
     >
       <Skeleton className="h-7 w-48" />
@@ -103,13 +103,13 @@ export function CloudWorkspaceStatus({
             <EmptyTitle>
               {offline
                 ? "Connect to load your account"
-                : (issue?.title ?? "Cloud data could not be loaded")}
+                : (issue?.title ?? "Account data could not be loaded")}
             </EmptyTitle>
             <EmptyDescription>
               {offline
-                ? "Coin can open offline, but account data is only available from Supabase. Guest data remains available on this device."
+                ? "Coin can open offline, but signed-in data needs a connection. Guest data remains available on this device."
                 : (issue?.message ??
-                  "Your cloud workspace was not changed. Retry when your connection is stable.")}
+                  "Your data is safe. Check your connection and try loading it again.")}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -142,7 +142,7 @@ export function CloudWorkspaceStatus({
     return (
       <Alert>
         <CloudIcon />
-        <AlertTitle>Cloud workspace is ready</AlertTitle>
+        <AlertTitle>Your account is ready</AlertTitle>
         <AlertDescription>
           No transactions or budgets yet. Add your first record when you are
           ready.
@@ -157,8 +157,8 @@ export function CloudWorkspaceStatus({
         <WifiOffIcon />
         <AlertTitle>Viewing previously loaded data</AlertTitle>
         <AlertDescription>
-          Coin is offline. This account snapshot is read-only and will refresh
-          from Supabase when the connection returns.
+          Coin is offline. This previously loaded data is read-only and will
+          refresh when the connection returns.
         </AlertDescription>
       </Alert>
     )
@@ -168,7 +168,7 @@ export function CloudWorkspaceStatus({
     <Alert>
       <CloudAlertIcon />
       <AlertTitle>
-        {issue?.title ?? "Cloud data could not be refreshed"}
+        {issue?.title ?? "Account data could not be refreshed"}
       </AlertTitle>
       <AlertDescription>
         {issue?.message ??

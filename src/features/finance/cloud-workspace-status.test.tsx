@@ -21,7 +21,7 @@ describe("CloudWorkspaceStatus", () => {
     )
 
     expect(
-      screen.getByRole("status", { name: "Loading cloud workspace" })
+      screen.getByRole("status", { name: "Loading account data" })
     ).toBeTruthy()
 
     rerender(
@@ -34,7 +34,7 @@ describe("CloudWorkspaceStatus", () => {
       />
     )
 
-    expect(screen.getByText("Cloud workspace is ready")).toBeTruthy()
+    expect(screen.getByText("Your account is ready")).toBeTruthy()
     expect(screen.getByText(/No transactions or budgets yet/)).toBeTruthy()
   })
 
@@ -54,7 +54,8 @@ describe("CloudWorkspaceStatus", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 
     expect(onRetry).toHaveBeenCalledOnce()
-    expect(screen.getByText("Cloud data could not be loaded")).toBeTruthy()
+    expect(screen.getByText("Account data could not be loaded")).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/cloud|supabase/i)
   })
 
   it("makes failed mutations explicit while preserving a refresh action", () => {
@@ -87,7 +88,7 @@ describe("CloudWorkspaceStatus", () => {
     )
 
     expect(screen.getByText("Viewing previously loaded data")).toBeTruthy()
-    expect(screen.getByText(/snapshot is read-only/)).toBeTruthy()
+    expect(screen.getByText(/previously loaded data is read-only/)).toBeTruthy()
   })
 
   it("shows account placeholders after an offline reload", () => {
@@ -105,5 +106,6 @@ describe("CloudWorkspaceStatus", () => {
     expect(
       screen.getByLabelText("Account data unavailable offline")
     ).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/cloud|supabase/i)
   })
 })

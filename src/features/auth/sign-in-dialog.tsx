@@ -64,7 +64,7 @@ export function SignInDialog({
         <DrawerContent>
           <DrawerHeader className="items-center gap-2 px-6 pt-5">
             <CoinMark />
-            <DrawerTitle>Open your cloud workspace</DrawerTitle>
+            <DrawerTitle>Use Coin across devices</DrawerTitle>
             <DrawerDescription className="max-w-xs">
               Sign in to access your transactions, budgets, and categories
               across devices.
@@ -83,7 +83,7 @@ export function SignInDialog({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader className="items-center gap-2 px-4 pt-2 text-center">
           <CoinMark />
-          <DialogTitle>Open your cloud workspace</DialogTitle>
+          <DialogTitle>Use Coin across devices</DialogTitle>
           <DialogDescription className="max-w-xs">
             Sign in to access your transactions, budgets, and categories across
             devices.

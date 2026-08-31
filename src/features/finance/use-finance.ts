@@ -15,6 +15,7 @@ import {
 import { createSupabaseFinanceRepository } from "@/data/supabase-finance-repository"
 import type { NewTransaction, TransactionType } from "@/domain/finance"
 import { useAuth } from "@/features/auth/auth-provider"
+import { loadAccountDataWithRetry } from "@/features/finance/account-data-loader"
 import {
   browserIsOnline,
   subscribeToBrowserConnectivity,
@@ -114,7 +115,13 @@ export function useFinance() {
         setIssue(null)
 
         try {
-          const nextSnapshot = await cloudRepository.load()
+          const nextSnapshot = hasCloudSnapshotRef.current
+            ? await cloudRepository.load()
+            : await loadAccountDataWithRetry({
+                load: cloudRepository.load,
+                canRetry: () =>
+                  activeUserId.current === userId && browserIsOnline(),
+              })
           if (activeUserId.current !== userId) return
 
           hasCloudSnapshotRef.current = true
@@ -177,7 +184,7 @@ export function useFinance() {
         }
 
         if (reason === "resume" || cloudState === "offline") {
-          void refreshCloud(true)
+          void refreshCloud()
         }
       }),
     [auth.status, cloudState, refreshCloud]
